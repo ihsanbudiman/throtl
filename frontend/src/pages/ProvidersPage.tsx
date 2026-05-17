@@ -122,7 +122,7 @@ export default function ProvidersPage() {
           </p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
+          <DialogTrigger>
             <Button>
               <Plus className="h-4 w-4 mr-2" />
               Add Provider

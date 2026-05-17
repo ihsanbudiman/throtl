@@ -39,6 +39,7 @@ export default function AddProviderDialog({ onSuccess }: AddProviderDialogProps)
       await api.createProvider({
         id: formID,
         name: formName,
+        type: "openai",
         base_url: formBaseURL,
         api_key: formAPIKey,
       });
