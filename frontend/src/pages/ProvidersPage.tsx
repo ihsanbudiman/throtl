@@ -37,7 +37,6 @@ export default function ProvidersPage() {
   const { toast } = useToast();
   const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
-  const [deleting, setDeleting] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<Provider | null>(null);
 
   // Form state
@@ -76,13 +75,13 @@ export default function ProvidersPage() {
   };
 
   const handleDelete = async (id: string) => {
-    setDeleting(id);
-    setTimeout(async () => {
+    try {
       await api.deleteProvider(id);
-      setDeleting(null);
       toast({ title: "Provider deleted", variant: "destructive" });
       loadProviders();
-    }, 200);
+    } catch (err) {
+      toast({ title: "Delete failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+    }
   };
 
   if (loading) {
@@ -230,7 +229,7 @@ export default function ProvidersPage() {
           {providers.map((p, idx) => (
             <Card
               key={p.id}
-              className={`relative group border-t-2 ${PROVIDER_BORDERS[idx % PROVIDER_BORDERS.length]} overflow-hidden transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/5 bg-gradient-to-b ${PROVIDER_ACCENTS[idx % PROVIDER_ACCENTS.length]} ${deleting === p.id ? "opacity-0 scale-95" : "opacity-100 scale-100"}`}
+              className={`relative group border-t-2 ${PROVIDER_BORDERS[idx % PROVIDER_BORDERS.length]} overflow-hidden transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/5 bg-gradient-to-b ${PROVIDER_ACCENTS[idx % PROVIDER_ACCENTS.length]}`}
             >
               <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-chart-1/[0.03] to-transparent rounded-bl-[4rem]" />
               <CardHeader className="pb-3">

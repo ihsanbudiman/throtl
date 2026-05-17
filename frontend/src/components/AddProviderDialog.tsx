@@ -14,6 +14,7 @@ import {
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { Plus } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface AddProviderDialogProps {
   onSuccess: () => void;
@@ -24,12 +25,14 @@ export default function AddProviderDialog({ onSuccess }: AddProviderDialogProps)
   const [open, setOpen] = useState(false);
   const [formID, setFormID] = useState("");
   const [formName, setFormName] = useState("");
+  const [formType, setFormType] = useState("openai");
   const [formBaseURL, setFormBaseURL] = useState("");
   const [formAPIKey, setFormAPIKey] = useState("");
 
   const resetForm = () => {
     setFormID("");
     setFormName("");
+    setFormType("openai");
     setFormBaseURL("");
     setFormAPIKey("");
   };
@@ -39,7 +42,7 @@ export default function AddProviderDialog({ onSuccess }: AddProviderDialogProps)
       await api.createProvider({
         id: formID,
         name: formName,
-        type: "openai",
+        type: formType,
         base_url: formBaseURL,
         api_key: formAPIKey,
       });
@@ -98,16 +101,35 @@ export default function AddProviderDialog({ onSuccess }: AddProviderDialogProps)
             />
           </div>
           <div className="space-y-2">
+            <Label htmlFor="ptype">Provider Type</Label>
+            <Select value={formType} onValueChange={(v) => { if (v) setFormType(v); }}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="openai">OpenAI Compatible</SelectItem>
+                <SelectItem value="anthropic">Anthropic</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {formType === "openai"
+                ? "Any API that follows the /v1/chat/completions format"
+                : "Anthropic Messages API (/v1/messages format)"}
+            </p>
+          </div>
+          <div className="space-y-2">
             <Label htmlFor="purl">Base URL</Label>
             <Input
               id="purl"
-              placeholder="e.g. https://api.openai.com"
+              placeholder={formType === "anthropic" ? "e.g. https://api.anthropic.com" : "e.g. https://api.openai.com"}
               value={formBaseURL}
               autoComplete="off"
               onChange={(e) => setFormBaseURL(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              OpenAI-compatible endpoint. No trailing slash.
+              {formType === "openai"
+                ? "OpenAI-compatible endpoint. No trailing slash."
+                : "Anthropic API endpoint. e.g. https://api.anthropic.com"}
             </p>
           </div>
           <div className="space-y-2">

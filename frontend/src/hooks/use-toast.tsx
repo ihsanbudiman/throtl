@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useRef, useEffect, type ReactNode } from "react";
 
 export type ToastVariant = "default" | "success" | "destructive";
 
@@ -21,6 +21,11 @@ const ToastContext = createContext<ToastContextType | null>(null);
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const counterRef = useRef(0);
+  const timersRef = useRef<number[]>([]);
+
+  useEffect(() => {
+    return () => timersRef.current.forEach(clearTimeout);
+  }, []);
 
   const dismiss = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -30,7 +35,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     (t: Omit<Toast, "id">) => {
       const id = `toast-${++counterRef.current}`;
       setToasts((prev) => [...prev, { ...t, id }]);
-      setTimeout(() => dismiss(id), 4000);
+      const timerId = window.setTimeout(() => dismiss(id), 4000);
+      timersRef.current.push(timerId);
     },
     [dismiss]
   );

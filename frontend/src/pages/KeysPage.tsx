@@ -42,13 +42,8 @@ export default function KeysPage() {
   }, []);
 
   useEffect(() => {
-    const fetch = async () => {
-      const k = await api.listKeys();
-      setKeys(k || []);
-      setLoading(false);
-    };
-    fetch();
-  }, []);
+    loadKeys();
+  }, [loadKeys]);
 
   const handleCreateSuccess = (key: APIKey) => {
     setNewKey(key);
