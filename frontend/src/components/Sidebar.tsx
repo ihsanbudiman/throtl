@@ -1,7 +1,8 @@
-import { type LucideIcon, LayoutDashboard, KeyRound, Server, Activity, LogOut, Cpu, Menu, X } from "lucide-react";
+import { type LucideIcon, LayoutDashboard, KeyRound, Server, Activity, LogOut, Cpu, Menu, X, Sun, Moon } from "lucide-react";
 import ThrotlIcon from "@/assets/throtl-icon.svg";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
+import { useTheme } from "@/hooks/use-theme";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -55,6 +56,7 @@ function NavItem({ item, current, onNavigate, onClick }: { item: NavItem; curren
 
 export function Sidebar({ current, onNavigate }: SidebarProps) {
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
 
@@ -67,7 +69,7 @@ export function Sidebar({ current, onNavigate }: SidebarProps) {
     <>
       <div className="flex items-center gap-3 px-5 py-5 border-b border-sidebar-border">
         <div className="flex h-7 w-7 items-center justify-center overflow-hidden shrink-0">
-          <img src={ThrotlIcon} alt="Throtl" className="h-full w-full object-contain invert" />
+          <img src={ThrotlIcon} alt="Throtl" className="h-full w-full object-contain" style={{ filter: "var(--logo-filter)" }} />
         </div>
         <div>
           <h1 className="text-sm font-[400] tracking-tight text-sidebar-foreground">Throtl</h1>
@@ -80,6 +82,13 @@ export function Sidebar({ current, onNavigate }: SidebarProps) {
         ))}
       </nav>
       <div className="border-t border-sidebar-border px-3 py-3 space-y-0.5">
+        <button
+          onClick={toggleTheme}
+          className="flex w-full items-center gap-3 px-3 py-2 text-sm font-[400] text-body-mid hover:text-sidebar-foreground transition-all duration-150"
+        >
+          {theme === "dark" ? <Sun className="h-4 w-4 shrink-0" /> : <Moon className="h-4 w-4 shrink-0" />}
+          {theme === "dark" ? "Light mode" : "Dark mode"}
+        </button>
         <button
           onClick={() => setLogoutOpen(true)}
           className="flex w-full items-center gap-3 px-3 py-2 text-sm font-[400] text-body-mid hover:text-destructive transition-all duration-150"
@@ -108,7 +117,7 @@ export function Sidebar({ current, onNavigate }: SidebarProps) {
         </button>
         <div className="flex items-center gap-2">
           <div className="flex h-5 w-5 items-center justify-center overflow-hidden">
-            <img src={ThrotlIcon} alt="Throtl" className="h-full w-full object-contain invert" />
+            <img src={ThrotlIcon} alt="Throtl" className="h-full w-full object-contain" style={{ filter: "var(--logo-filter)" }} />
           </div>
           <span className="text-sm font-[400]">Throtl</span>
         </div>

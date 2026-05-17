@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { Sidebar, type Page } from "@/components/Sidebar";
+import { ThemeProvider } from "@/hooks/use-theme";
 import { ToastProvider } from "@/hooks/use-toast";
 import { ToastContainer } from "@/components/ToastContainer";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -113,13 +114,15 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <ToastProvider>
-        <BrowserRouter>
+    <ThemeProvider>
+      <AuthProvider>
+        <ToastProvider>
+          <BrowserRouter>
           <AppContent />
           <ToastContainer />
         </BrowserRouter>
       </ToastProvider>
     </AuthProvider>
+    </ThemeProvider>
   );
 }

@@ -4,7 +4,7 @@
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/geist-mono";
 
-/* ── xAI-inspired dark-only theme for Throtl Dashboard (v2) ── */
+/* ── Light mode dark mode via .light class on <html> ── */
 
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; }
@@ -159,6 +159,60 @@
   --font-sans: "Inter", system-ui, -apple-system, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
   --font-heading: "Inter", system-ui, -apple-system, sans-serif;
+
+  /* Logo icon — invert dark logo to white on dark bg */
+  --logo-filter: invert(1);
+}
+
+/* ── Light mode overrides ── */
+.light {
+  --color-canvas: #f5f5f5;
+  --color-canvas-soft: #e8e8ec;
+  --color-canvas-card: #ffffff;
+  --color-canvas-mid: #d0d0d6;
+  --color-hairline: #e0e0e4;
+
+  --color-ink: #141416;
+  --color-ink-hover: #202024;
+  --color-body: #54545a;
+  --color-body-mid: #8a8a92;
+
+  --color-primary: #141416;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #e8e8ec;
+  --color-secondary-foreground: #54545a;
+  --color-muted: #e8e8ec;
+  --color-muted-foreground: #8a8a92;
+  --color-accent: #e8e8ec;
+  --color-accent-foreground: #141416;
+  --color-destructive: #dc2626;
+  --color-destructive-foreground: #ffffff;
+  --color-success: #16a34a;
+  --color-success-foreground: #ffffff;
+  --color-warning: #d97706;
+
+  --color-border: #e0e0e4;
+  --color-input: #e0e0e4;
+  --color-ring: #141416;
+
+  --color-background: #f5f5f5;
+  --color-foreground: #141416;
+  --color-card: #ffffff;
+  --color-card-foreground: #141416;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #141416;
+
+  --color-sidebar: #ffffff;
+  --color-sidebar-foreground: #141416;
+  --color-sidebar-primary: #141416;
+  --color-sidebar-primary-foreground: #ffffff;
+  --color-sidebar-accent: #e8e8ec;
+  --color-sidebar-accent-foreground: #141416;
+  --color-sidebar-border: #e0e0e4;
+  --color-sidebar-ring: #141416;
+
+  /* Logo icon — show original colors on light bg */
+  --logo-filter: none;
 }
 
 @layer base {

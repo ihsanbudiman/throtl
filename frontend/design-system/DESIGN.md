@@ -3,9 +3,10 @@ version: alpha
 name: throtl-xai-dashboard
 description: >
   An adaptation of xAI's design language for the Throtl API Gateway dashboard.
-  Dark near-black canvas (#0a0a0a), white pill outlines, Geist Mono uppercase labels,
-  muted sunset/dusk accent palette reserved for data visualization. Reads as an
-  engineering console — precise, unadorned, confident.
+  Dual-mode (dark/light): dark near-black canvas (#0a0a0a), light off-white canvas
+  (#f5f5f5). White pill outlines in dark, black pill outlines in light. Geist Mono
+  uppercase labels, muted sunset/dusk accent palette reserved for data visualization.
+  Reads as an engineering console — precise, unadorned, confident.
 
 colors:
   # ── Brand ──
@@ -29,6 +30,30 @@ colors:
   # ── Status (minimal — shape + text first, color second) ──
   success: "#22c55e"
   destructive: "#ef4444"
+
+  # ── Light Mode — inverted palette ──
+  light:
+    # Brand — black primary for light canvas
+    primary: "#141416"
+    on-primary: "#ffffff"
+
+    # Surfaces
+    canvas: "#f5f5f5"
+    canvas-soft: "#e8e8ec"
+    canvas-card: "#ffffff"
+    canvas-mid: "#d0d0d6"
+    hairline: "#e0e0e4"
+
+    # Text — dark-on-light hierarchy
+    ink: "#141416"
+    ink-hover: "#202024"
+    body: "#54545a"
+    body-mid: "#8a8a92"
+    mute: "#8a8a92"
+
+    # Status (same hues, adjusted for light bg)
+    success: "#16a34a"
+    destructive: "#dc2626"
 
   # ── Chart Accents (muted palette, used ONLY in data viz) ──
   chart-sunset: "#ff7a17"
