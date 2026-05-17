@@ -2,13 +2,11 @@ import { useEffect, useState } from "react";
 import { api, type Provider } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, MoreHorizontal, Trash2, Server, Globe, KeyRound } from "lucide-react";
+import AddProviderDialog from "@/components/AddProviderDialog";
+import { MoreHorizontal, Trash2, Server, Globe, KeyRound } from "lucide-react";
 
 const PROVIDER_ACCENTS = [
   "from-chart-1/[0.04] to-transparent",
@@ -30,22 +28,11 @@ export default function ProvidersPage() {
   const { toast } = useToast();
   const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
-  const [formID, setFormID] = useState("");
-  const [formName, setFormName] = useState("");
-  const [formBaseURL, setFormBaseURL] = useState("");
-  const [formAPIKey, setFormAPIKey] = useState("");
 
   const loadData = async () => { const p = await api.listProviders(); setProviders(p || []); setLoading(false); };
 
   useEffect(() => { loadData(); }, []);
-
-  const handleCreate = async () => {
-    await api.createProvider({ id: formID, name: formName, base_url: formBaseURL, api_key: formAPIKey });
-    setDialogOpen(false); setFormID(""); setFormName(""); setFormBaseURL(""); setFormAPIKey("");
-    toast({ title: "Provider added", description: formName, variant: "success" }); loadData();
-  };
 
   const handleDelete = async (id: string) => {
     setDeleting(id);
@@ -73,39 +60,7 @@ export default function ProvidersPage() {
           <h2 className="text-2xl font-[400] tracking-tight">Providers</h2>
           <p className="text-muted-foreground text-sm mt-1">Manage upstream AI providers and their API keys</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger><Button><Plus className="h-4 w-4 mr-2" />Add Provider</Button></DialogTrigger>
-          <DialogContent className="sm:max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Add Provider</DialogTitle>
-              <DialogDescription>Connect an upstream AI provider. The API key is stored locally and used to proxy requests.</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="pid">Provider ID</Label>
-                <Input id="pid" placeholder="e.g. wafer, openai, anthropic" value={formID} onChange={(e) => setFormID(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} />
-                <p className="text-xs text-muted-foreground">Used in model calls: <code className="bg-muted px-1 rounded">{formID || "id"}/model-name</code></p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="pname">Provider Name</Label>
-                <Input id="pname" placeholder="e.g. OpenAI, Anthropic" value={formName} onChange={(e) => setFormName(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="purl">Base URL</Label>
-                <Input id="purl" placeholder="e.g. https://api.openai.com" value={formBaseURL} onChange={(e) => setFormBaseURL(e.target.value)} />
-                <p className="text-xs text-muted-foreground">OpenAI-compatible endpoint. No trailing slash.</p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="pkey">API Key</Label>
-                <Input id="pkey" type="password" placeholder="sk-..." value={formAPIKey} onChange={(e) => setFormAPIKey(e.target.value)} />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-              <Button onClick={handleCreate} disabled={!formID || !formName || !formBaseURL || !formAPIKey}>Add Provider</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <AddProviderDialog onSuccess={loadData} />
       </div>
 
       {providers.length === 0 ? (
