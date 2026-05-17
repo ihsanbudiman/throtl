@@ -18,7 +18,7 @@ import (
 func main() {
 	dbURL := os.Getenv("THROTL_DB_URL")
 	if dbURL == "" {
-		dbURL = "postgres://throtl:throtl@localhost:5432/throtl?sslmode=disable"
+		dbURL = "throtl.db"
 	}
 	port := os.Getenv("THROTL_PORT")
 	if port == "" {
@@ -50,11 +50,6 @@ func main() {
 	// Echo server
 	e := echo.New()
 	e.HideBanner = true
-	e.Use(echomw.LoggerWithConfig(echomw.LoggerConfig{
-		Skipper: func(c echo.Context) bool {
-			return true
-		},
-	}))
 	e.Use(echomw.CORSWithConfig(echomw.CORSConfig{
 		AllowOrigins: []string{"*"},
 		AllowMethods: []string{echo.GET, echo.POST, echo.PUT, echo.DELETE, echo.OPTIONS, echo.PATCH},

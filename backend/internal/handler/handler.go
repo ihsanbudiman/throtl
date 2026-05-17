@@ -18,9 +18,10 @@ import (
 )
 
 type Handler struct {
-	store     *store.Store
-	jwtSecret []byte
-	rl        RateLimitStatusProvider
+	store       *store.Store
+	jwtSecret   []byte
+	rl          RateLimitStatusProvider
+	modelClient *http.Client
 }
 
 type RateLimitStatusProvider interface {
@@ -28,7 +29,12 @@ type RateLimitStatusProvider interface {
 }
 
 func New(s *store.Store, jwtSecret string, rl RateLimitStatusProvider) *Handler {
-	return &Handler{store: s, jwtSecret: []byte(jwtSecret), rl: rl}
+	return &Handler{
+		store:       s,
+		jwtSecret:   []byte(jwtSecret),
+		rl:          rl,
+		modelClient: &http.Client{Timeout: 10 * time.Second},
+	}
 }
 
 // --- Auth Handlers ---
@@ -122,7 +128,10 @@ func (h *Handler) Login(c echo.Context) error {
 }
 
 func (h *Handler) GetMe(c echo.Context) error {
-	userID := c.Get("user_id").(string)
+	userID, ok := c.Get("user_id").(string)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid session"})
+	}
 	user, err := h.store.GetUserByID(userID)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -172,7 +181,7 @@ func (h *Handler) CreateProvider(c echo.Context) error {
 	}
 
 	go func() {
-		models, err := fetchUpstreamModels(p.BaseURL, p.APIKey)
+		models, err := fetchUpstreamModels(h.modelClient, p.BaseURL, p.APIKey)
 		if err != nil {
 			log.Printf("Failed to fetch models from %s on creation: %v", p.ID, err)
 			return
@@ -332,8 +341,7 @@ type upstreamModel struct {
 	OwnedBy string `json:"owned_by"`
 }
 
-func fetchUpstreamModels(baseURL, apiKey string) ([]upstreamModel, error) {
-	client := &http.Client{Timeout: 10 * time.Second}
+func fetchUpstreamModels(client *http.Client, baseURL, apiKey string) ([]upstreamModel, error) {
 	url := strings.TrimRight(baseURL, "/") + "/models"
 	req, _ := http.NewRequest("GET", url, nil)
 	req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -376,7 +384,7 @@ func (h *Handler) ListModels(c echo.Context) error {
 
 	var data []ModelEntry
 	for _, provider := range providers {
-		models, err := fetchUpstreamModels(provider.BaseURL, provider.APIKey)
+		models, err := fetchUpstreamModels(h.modelClient, provider.BaseURL, provider.APIKey)
 		if err != nil {
 			log.Printf("Failed to fetch models from %s: %v", provider.ID, err)
 			continue

@@ -16,17 +16,28 @@ import (
 )
 
 type OpenAIProxy struct {
-	store *store.Store
+	store       *store.Store
+	upstream    *http.Client
+	modelClient *http.Client
 }
 
 func NewOpenAIProxy(s *store.Store) *OpenAIProxy {
-	return &OpenAIProxy{store: s}
+	return &OpenAIProxy{
+		store:       s,
+		upstream:    &http.Client{Timeout: 300 * time.Second},
+		modelClient: &http.Client{Timeout: 10 * time.Second},
+	}
 }
 
 func (p *OpenAIProxy) ProxyHandler(c echo.Context) error {
 	start := time.Now()
-	keyID := c.Get("throtl_key_id").(string)
-	allowedModels := c.Get("throtl_allowed_models").(string)
+	keyID, ok := c.Get("throtl_key_id").(string)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			"error": map[string]string{"message": "Missing API key context", "type": "authentication_error"},
+		})
+	}
+	allowedModels, _ := c.Get("throtl_allowed_models").(string)
 
 	body, err := io.ReadAll(c.Request().Body)
 	if err != nil {
@@ -143,8 +154,7 @@ func (p *OpenAIProxy) ProxyHandler(c echo.Context) error {
 		}
 	}
 
-	client := &http.Client{Timeout: 300 * time.Second}
-	upstreamResp, err := client.Do(upstreamReq)
+	upstreamResp, err := p.upstream.Do(upstreamReq)
 	if err != nil {
 		log.Printf("Upstream request failed: %v", err)
 		return c.JSON(http.StatusBadGateway, map[string]interface{}{
@@ -237,7 +247,7 @@ func (p *OpenAIProxy) ProxyHandler(c echo.Context) error {
 }
 
 func (p *OpenAIProxy) ListModels(c echo.Context) error {
-	allowedModels := c.Get("throtl_allowed_models").(string)
+	allowedModels, _ := c.Get("throtl_allowed_models").(string)
 
 	providers, err := p.store.ListProviders()
 	if err != nil {
@@ -270,21 +280,20 @@ func (p *OpenAIProxy) ListModels(c echo.Context) error {
 	}
 
 	var data []modelEntry
-	client := &http.Client{Timeout: 10 * time.Second}
 
 	for _, provider := range providers {
 		url := strings.TrimRight(provider.BaseURL, "/") + "/models"
 		req, _ := http.NewRequest("GET", url, nil)
 		req.Header.Set("Authorization", "Bearer "+provider.APIKey)
 
-		resp, err := client.Do(req)
+		resp, err := p.modelClient.Do(req)
 		if err != nil {
 			log.Printf("Failed to fetch models from %s: %v", provider.ID, err)
 			continue
 		}
+		defer resp.Body.Close()
 
 		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
 		if err != nil {
 			continue
 		}

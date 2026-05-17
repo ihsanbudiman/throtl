@@ -129,8 +129,13 @@ func (rl *RateLimiter) GetStatus(keyID string) KeyRateLimitStatus {
 func (rl *RateLimiter) Middleware() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			keyID := c.Get("throtl_key_id").(string)
-			limitCount := c.Get("throtl_limit_window").(int)
+			keyID, ok := c.Get("throtl_key_id").(string)
+			if !ok {
+				return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+					"error": map[string]string{"message": "Missing API key context", "type": "authentication_error"},
+				})
+			}
+			limitCount, _ := c.Get("throtl_limit_window").(int)
 			limitWindowHrs, _ := c.Get("throtl_limit_window_hrs").(int)
 			dailyLimit, _ := c.Get("throtl_limit_daily").(int)
 
