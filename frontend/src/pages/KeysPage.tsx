@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { api, type APIKey } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import GenerateKeyDialog from "@/components/GenerateKeyDialog";
-import { Copy, Trash2, Check, KeyRound, Infinity } from "lucide-react";
+import { Copy, Trash2, Check, KeyRound, Infinity as InfinityIcon } from "lucide-react";
 
 function formatResetTime(iso: string): string {
   const d = new Date(iso);
@@ -35,16 +35,27 @@ export default function KeysPage() {
   const [newKey, setNewKey] = useState<APIKey | null>(null);
   const [deleteKey, setDeleteKey] = useState<APIKey | null>(null);
 
-  const loadData = async () => { const k = await api.listKeys(); setKeys(k || []); setLoading(false); };
+  const loadKeys = useCallback(async () => {
+    const k = await api.listKeys();
+    setKeys(k || []);
+    setLoading(false);
+  }, []);
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    const fetch = async () => {
+      const k = await api.listKeys();
+      setKeys(k || []);
+      setLoading(false);
+    };
+    fetch();
+  }, []);
 
   const handleCreateSuccess = (key: APIKey) => {
     setNewKey(key);
-    loadData();
+    loadKeys();
   };
 
-  const handleToggle = async (id: string, active: boolean) => { await api.toggleKey(id, !active); loadData(); };
+  const handleToggle = async (id: string, active: boolean) => { await api.toggleKey(id, !active); loadKeys(); };
 
   const copyKey = (key: string) => {
     navigator.clipboard.writeText(key);
@@ -137,7 +148,7 @@ export default function KeysPage() {
                                 <><span className="font-mono">{key.rate_limit.count}/{key.rate_limit.limit}</span><div className="text-xs text-muted-foreground font-mono">resets {formatResetTime(key.rate_limit.reset_at)}</div></>
                               ) : <span className="text-xs text-muted-foreground shimmer inline-block px-2 py-0.5 rounded">No requests yet</span>}
                             </div>
-                          ) : <Infinity className="h-3.5 w-3.5 text-muted-foreground" />}
+                          ) : <InfinityIcon className="h-3.5 w-3.5 text-muted-foreground" />}
                         </TableCell>
                         <TableCell>
                           {key.limit_daily > 0 ? (
@@ -146,7 +157,7 @@ export default function KeysPage() {
                                 <><span className="font-mono">{key.rate_limit.daily_count}/{key.rate_limit.daily_limit}</span><div className="text-xs text-muted-foreground font-mono">resets {formatDailyReset(key.rate_limit.daily_reset)}</div></>
                               ) : <span className="text-xs text-muted-foreground shimmer inline-block px-2 py-0.5 rounded">No requests yet</span>}
                             </div>
-                          ) : <Infinity className="h-3.5 w-3.5 text-muted-foreground" />}
+                          ) : <InfinityIcon className="h-3.5 w-3.5 text-muted-foreground" />}
                         </TableCell>
                         <TableCell>{key.allowed_models ? <Badge variant="secondary" className="text-xs">{key.allowed_models.split(",").length} models</Badge> : <span className="text-muted-foreground">All</span>}</TableCell>
                         <TableCell><Switch checked={key.active} onCheckedChange={() => handleToggle(key.id, key.active)} /></TableCell>
@@ -196,7 +207,7 @@ export default function KeysPage() {
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setDeleteKey(null)}>Cancel</Button>
-            <Button variant="destructive" size="sm" onClick={() => { if (deleteKey) { api.deleteKey(deleteKey.id).then(() => { setDeleteKey(null); toast({ title: "Key deleted", description: deleteKey.name, variant: "destructive" }); loadData(); }); } }}>Delete</Button>
+            <Button variant="destructive" size="sm" onClick={() => { if (deleteKey) { api.deleteKey(deleteKey.id).then(() => { setDeleteKey(null); toast({ title: "Key deleted", description: deleteKey.name, variant: "destructive" }); loadKeys(); }); } }}>Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

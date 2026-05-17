@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { api, type Model, type Provider } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -27,17 +27,26 @@ export default function ModelsPage() {
   const [search, setSearch] = useState("");
   const [selectedProviderIds, setSelectedProviderIds] = useState<string[]>([]);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     const [modelsResp, provs] = await Promise.all([api.listModels(), api.listProviders()]);
     setModels(modelsResp?.data || []);
     setProviders(provs || []);
     setLoading(false);
     setRefreshing(false);
-  };
+  }, []);
 
   const refresh = async () => { setRefreshing(true); await loadData(); };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    const fetch = async () => {
+      const [modelsResp, provs] = await Promise.all([api.listModels(), api.listProviders()]);
+      setModels(modelsResp?.data || []);
+      setProviders(provs || []);
+      setLoading(false);
+      setRefreshing(false);
+    };
+    fetch();
+  }, []);
 
   const handleToggle = async (modelId: string, currentActive: boolean) => {
     const newActive = !currentActive;

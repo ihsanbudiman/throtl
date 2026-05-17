@@ -37,17 +37,21 @@ export default function GenerateKeyDialog({ onSuccess }: GenerateKeyDialogProps)
   };
 
   const handleCreate = async () => {
-    const key = await api.createKey({
-      name: formName,
-      limit_window: formLimitWindow ? parseInt(formLimitWindow) : 0,
-      limit_daily: formLimitDaily ? parseInt(formLimitDaily) : 0,
-      limit_window_hrs: formWindowHrs ? parseInt(formWindowHrs) : 5,
-      allowed_models: formModels,
-    });
-    setOpen(false);
-    resetForm();
-    toast({ title: "Key created", description: key.name, variant: "success" });
-    onSuccess(key);
+    try {
+      const key = await api.createKey({
+        name: formName,
+        limit_window: formLimitWindow ? parseInt(formLimitWindow) : 0,
+        limit_daily: formLimitDaily ? parseInt(formLimitDaily) : 0,
+        limit_window_hrs: formWindowHrs ? parseInt(formWindowHrs) : 5,
+        allowed_models: formModels,
+      });
+      setOpen(false);
+      resetForm();
+      toast({ title: "Key created", description: key.name, variant: "success" });
+      onSuccess(key);
+    } catch (err) {
+      toast({ title: "Failed to create key", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+    }
   };
 
   return (

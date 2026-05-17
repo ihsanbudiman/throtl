@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { api, type Provider } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -38,14 +38,19 @@ export default function ProvidersPage() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<Provider | null>(null);
 
-  const loadData = async () => {
+  const loadProviders = useCallback(async () => {
     const p = await api.listProviders();
     setProviders(p || []);
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
-    loadData();
+    const fetch = async () => {
+      const p = await api.listProviders();
+      setProviders(p || []);
+      setLoading(false);
+    };
+    fetch();
   }, []);
 
   const handleDelete = async (id: string) => {
@@ -54,7 +59,7 @@ export default function ProvidersPage() {
       await api.deleteProvider(id);
       setDeleting(null);
       toast({ title: "Provider deleted", variant: "destructive" });
-      loadData();
+      loadProviders();
     }, 200);
   };
 
@@ -94,7 +99,7 @@ export default function ProvidersPage() {
             Manage upstream AI providers and their API keys
           </p>
         </div>
-        <AddProviderDialog onSuccess={loadData} />
+        <AddProviderDialog onSuccess={loadProviders} />
       </div>
 
       {providers.length === 0 ? (

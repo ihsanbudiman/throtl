@@ -40,7 +40,12 @@ export default function OverviewPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => { api.getStats().then(setStats).finally(() => setLoading(false)); }, []);
+  useEffect(() => {
+    api.getStats()
+      .then(setStats)
+      .catch(() => setStats(null))
+      .finally(() => setLoading(false));
+  }, []);
 
   if (loading) {
     return (

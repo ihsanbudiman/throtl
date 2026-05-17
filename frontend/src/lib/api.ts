@@ -25,11 +25,11 @@ async function request<T>(path: string, opts?: RequestInit): Promise<T> {
       if (typeof body.error === "string") message = body.error;
       else if (typeof body.message === "string") message = body.message;
     } catch {
-      // not JSON — use default message
+      // Response body is not valid JSON — use the default status-based message
     }
     throw new Error(message);
   }
-  if (res.status === 204) return undefined as T;
+  if (res.status === 204) return undefined as unknown as T;
   return res.json();
 }
 

@@ -35,16 +35,20 @@ export default function AddProviderDialog({ onSuccess }: AddProviderDialogProps)
   };
 
   const handleCreate = async () => {
-    await api.createProvider({
-      id: formID,
-      name: formName,
-      base_url: formBaseURL,
-      api_key: formAPIKey,
-    });
-    setOpen(false);
-    resetForm();
-    toast({ title: "Provider added", description: formName, variant: "success" });
-    onSuccess();
+    try {
+      await api.createProvider({
+        id: formID,
+        name: formName,
+        base_url: formBaseURL,
+        api_key: formAPIKey,
+      });
+      setOpen(false);
+      resetForm();
+      toast({ title: "Provider added", description: formName, variant: "success" });
+      onSuccess();
+    } catch (err) {
+      toast({ title: "Failed to add provider", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+    }
   };
 
   return (
