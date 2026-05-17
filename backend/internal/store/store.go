@@ -82,6 +82,7 @@ func (s *Store) migrate() error {
 			provider_id TEXT NOT NULL REFERENCES providers(id),
 			model_name TEXT NOT NULL,
 			active INTEGER DEFAULT 1,
+			request_multiplier INTEGER DEFAULT 1,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			UNIQUE(provider_id, model_name)
 		)`,
@@ -94,6 +95,9 @@ func (s *Store) migrate() error {
 
 	// Backward-compatible: add type column to existing databases
 	s.db.Exec(`ALTER TABLE providers ADD COLUMN type TEXT NOT NULL DEFAULT 'openai'`)
+
+	// Backward-compatible: add request_multiplier column
+	s.db.Exec(`ALTER TABLE model_overrides ADD COLUMN request_multiplier INTEGER DEFAULT 1`)
 
 	return nil
 }
@@ -366,6 +370,19 @@ func (s *Store) IncrementWindowCount(keyID string) error {
 	return err
 }
 
+func (s *Store) IncrementWindowCountBy(keyID string, delta int) error {
+	if delta <= 0 {
+		return nil
+	}
+	_, err := s.db.Exec(`UPDATE api_keys SET window_count = window_count + ?, daily_count = daily_count + ? WHERE id = ?`, delta, delta, keyID)
+	return err
+}
+
+func (s *Store) UpdateModelOverrideMultiplier(id string, multiplier int) error {
+	_, err := s.db.Exec(`UPDATE model_overrides SET request_multiplier = ? WHERE id = ?`, multiplier, id)
+	return err
+}
+
 func (s *Store) GetDailyCount(keyID string) (date string, count int, err error) {
 	var ns sql.NullString
 	err = s.db.QueryRow(`SELECT daily_date, daily_count FROM api_keys WHERE id = ?`, keyID).Scan(&ns, &count)
@@ -418,15 +435,15 @@ func (s *Store) GetUserByID(id string) (*model.User, error) {
 }
 
 func (s *Store) UpsertModelOverride(m *model.ModelOverride) error {
-	_, err := s.db.Exec(`INSERT INTO model_overrides (id, provider_id, model_name, active, created_at)
-		VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT (provider_id, model_name) DO UPDATE SET active = ?`,
-		m.ID, m.ProviderID, m.ModelName, m.Active, m.CreatedAt, m.Active)
+	_, err := s.db.Exec(`INSERT INTO model_overrides (id, provider_id, model_name, active, request_multiplier, created_at)
+		VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT (provider_id, model_name) DO UPDATE SET active = ?, request_multiplier = ?`,
+		m.ID, m.ProviderID, m.ModelName, m.Active, m.RequestMultiplier, m.CreatedAt, m.Active, m.RequestMultiplier)
 	return err
 }
 
 func (s *Store) ListModelOverrides() ([]model.ModelOverride, error) {
-	rows, err := s.db.Query(`SELECT id, provider_id, model_name, active, created_at FROM model_overrides`)
+	rows, err := s.db.Query(`SELECT id, provider_id, model_name, active, request_multiplier, created_at FROM model_overrides`)
 	if err != nil {
 		return nil, err
 	}
@@ -434,7 +451,7 @@ func (s *Store) ListModelOverrides() ([]model.ModelOverride, error) {
 	result := make([]model.ModelOverride, 0)
 	for rows.Next() {
 		var m model.ModelOverride
-		if err := rows.Scan(&m.ID, &m.ProviderID, &m.ModelName, &m.Active, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.ProviderID, &m.ModelName, &m.Active, &m.RequestMultiplier, &m.CreatedAt); err != nil {
 			return nil, err
 		}
 		result = append(result, m)
@@ -447,9 +464,9 @@ func (s *Store) ListModelOverrides() ([]model.ModelOverride, error) {
 
 func (s *Store) GetModelOverride(providerID, modelName string) (*model.ModelOverride, error) {
 	var m model.ModelOverride
-	err := s.db.QueryRow(`SELECT id, provider_id, model_name, active, created_at FROM model_overrides
+	err := s.db.QueryRow(`SELECT id, provider_id, model_name, active, request_multiplier, created_at FROM model_overrides
 		WHERE provider_id = ? AND model_name = ?`, providerID, modelName).
-		Scan(&m.ID, &m.ProviderID, &m.ModelName, &m.Active, &m.CreatedAt)
+		Scan(&m.ID, &m.ProviderID, &m.ModelName, &m.Active, &m.RequestMultiplier, &m.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}

@@ -115,9 +115,15 @@ type ModelStat struct {
 }
 
 type ModelOverride struct {
-	ID         string    `json:"id"`
-	ProviderID string    `json:"provider_id"`
-	ModelName  string    `json:"model_name"`
-	Active     bool      `json:"active"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID               string    `json:"id"`
+	ProviderID       string    `json:"provider_id"`
+	ModelName        string    `json:"model_name"`
+	Active           bool      `json:"active"`
+	RequestMultiplier int      `json:"request_multiplier"`
+	CreatedAt        time.Time `json:"created_at"`
+}
+
+type UpdateModelOverrideRequest struct {
+	Active            *bool `json:"active,omitempty"`
+	RequestMultiplier *int  `json:"request_multiplier,omitempty"`
 }
