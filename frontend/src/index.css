@@ -1,0 +1,285 @@
+/* ============================================================
+   THROTL DESIGN SYSTEM
+
+   Design Language: Technical, utilitarian, sharp-cornered
+   Reference: pi.dev/packages aesthetic
+
+   DESIGN TOKENS INDEX:
+   ─────────────────────────────────────────────────────────────
+   COLORS:
+     --color-background      Page background
+     --color-foreground      Primary text
+     --color-card            Card surface
+     --color-card-foreground Card text
+     --color-popover         Popover/dropdown surface
+     --color-popover-foreground Popover text
+     --color-primary         Accent color (actions, links, active states)
+     --color-primary-foreground Text on primary bg
+     --color-secondary       Secondary surface
+     --color-secondary-foreground Secondary text
+     --color-muted           Muted surface
+     --color-muted-foreground Muted text (descriptions, labels)
+     --color-accent          Hover/focus surface
+     --color-accent-foreground Hover/focus text
+     --color-destructive     Error/danger color
+     --color-destructive-foreground Text on destructive bg
+     --color-border          Border color
+     --color-input           Input border color
+     --color-ring            Focus ring color
+
+   RADIUS:
+     --radius               Base radius (0 = sharp)
+     --radius-sm/md/lg/xl   Derived (all 0)
+
+   FONTS:
+     --font-sans             Geist Variable (UI text)
+     --font-mono             Monospace (code, keys, IDs)
+   ─────────────────────────────────────────────────────────────
+   ============================================================ */
+
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+
+/* ════════════════════════════════════════════════════════════════
+   ANIMATIONS & TRANSITIONS
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── Shimmer for skeleton loading ── */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* ── Pulse for live status indicators ── */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+
+/* ── Fade-in + slide-up for page/content entry ── */
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Scale bump for interactive feedback ── */
+@keyframes scale-bump {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.03); }
+  100% { transform: scale(1); }
+}
+
+/* ── Shake for error state ── */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(3px); }
+}
+
+/* ── Float for empty state icons ── */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+/* ── Glow pulse for attention elements ── */
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(13, 148, 136, 0.2); }
+  50% { box-shadow: 0 0 0 8px rgba(13, 148, 136, 0); }
+}
+
+/* ── Skeleton shimmer ── */
+@keyframes skeleton-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* ── Scale press for buttons ── */
+@keyframes press {
+  0% { transform: scale(1); }
+  50% { transform: scale(0.97); }
+  100% { transform: scale(1); }
+}
+
+/* ── Gradient sweep for animated borders ── */
+@keyframes gradient-sweep {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* ── Utility classes ── */
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--color-muted) 40%,
+    var(--color-accent) 50%,
+    var(--color-muted) 60%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+}
+
+.pulse-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+.fade-in-up {
+  animation: fade-in-up 0.3s ease-out both;
+}
+
+.float-icon {
+  animation: float 3s ease-in-out infinite;
+}
+
+.error-shake {
+  animation: shake 0.4s ease-in-out;
+}
+
+.glow-pulse {
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+/* ── Staggered fade-in for child elements ── */
+.fade-in-stagger > * {
+  animation: fade-in-up 0.3s ease-out both;
+}
+.fade-in-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.fade-in-stagger > *:nth-child(2) { animation-delay: 50ms; }
+.fade-in-stagger > *:nth-child(3) { animation-delay: 100ms; }
+.fade-in-stagger > *:nth-child(4) { animation-delay: 150ms; }
+.fade-in-stagger > *:nth-child(5) { animation-delay: 200ms; }
+.fade-in-stagger > *:nth-child(6) { animation-delay: 250ms; }
+.fade-in-stagger > *:nth-child(7) { animation-delay: 300ms; }
+.fade-in-stagger > *:nth-child(8) { animation-delay: 350ms; }
+
+/* ── Transition defaults ── */
+* {
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@custom-variant dark (&:is(.dark *));
+
+/* ── Light Mode ─────────────────────────────────────────────── */
+@theme {
+  --color-background: oklch(0.985 0 0);         /* near-white */
+  --color-foreground: oklch(0.13 0 0);          /* near-black */
+  --color-card: oklch(1 0 0);                   /* white */
+  --color-card-foreground: oklch(0.13 0 0);
+  --color-popover: oklch(1 0 0);
+  --color-popover-foreground: oklch(0.13 0 0);
+  --color-primary: oklch(0.55 0.15 175);        /* teal accent */
+  --color-primary-foreground: oklch(0.98 0 0);
+  --color-secondary: oklch(0.96 0 0);
+  --color-secondary-foreground: oklch(0.2 0 0);
+  --color-muted: oklch(0.96 0 0);
+  --color-muted-foreground: oklch(0.5 0 0);
+  --color-accent: oklch(0.96 0 0);
+  --color-accent-foreground: oklch(0.2 0 0);
+  --color-destructive: oklch(0.55 0.23 25);
+  --color-destructive-foreground: oklch(0.98 0 0);
+  --color-border: oklch(0.89 0 0);              /* subtle border */
+  --color-input: oklch(0.89 0 0);
+  --color-ring: oklch(0.55 0.15 175);
+
+  /* Chart colors — refined, modern palette */
+  --color-chart-1: oklch(0.55 0.15 175);        /* teal */
+  --color-chart-2: oklch(0.6 0.14 145);         /* emerald */
+  --color-chart-3: oklch(0.5 0.1 235);          /* steel blue */
+  --color-chart-4: oklch(0.65 0.15 65);         /* amber */
+  --color-chart-5: oklch(0.58 0.16 355);        /* rose */
+
+  /* Sidebar */
+  --color-sidebar: oklch(0.98 0 0);
+  --color-sidebar-foreground: oklch(0.13 0 0);
+  --color-sidebar-primary: oklch(0.55 0.15 175);
+  --color-sidebar-primary-foreground: oklch(0.98 0 0);
+  --color-sidebar-accent: oklch(0.96 0 0);
+  --color-sidebar-accent-foreground: oklch(0.2 0 0);
+  --color-sidebar-border: oklch(0.89 0 0);
+  --color-sidebar-ring: oklch(0.55 0.15 175);
+
+  /* ── Radius: ALL SHARP ── */
+  --radius: 0rem;
+
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+@layer base {
+  *, ::after, ::before, ::backdrop, ::file-selector-button {
+    border-color: var(--color-border);
+  }
+  body {
+    font-family: var(--font-sans);
+    color: var(--color-foreground);
+    background: var(--color-background);
+    @apply bg-background text-foreground;
+  }
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+/* ── Dark Mode ─────────────────────────────────────────────── */
+.dark {
+  --color-background: oklch(0.12 0.005 180);    /* very dark teal tint */
+  --color-foreground: oklch(0.95 0 0);
+  --color-card: oklch(0.15 0.005 180);           /* slightly lighter than bg */
+  --color-card-foreground: oklch(0.95 0 0);
+  --color-popover: oklch(0.15 0.005 180);
+  --color-popover-foreground: oklch(0.95 0 0);
+  --color-primary: oklch(0.62 0.14 175);         /* vibrant teal for dark bg */
+  --color-primary-foreground: oklch(0.12 0 0);
+  --color-secondary: oklch(0.2 0 0);
+  --color-secondary-foreground: oklch(0.95 0 0);
+  --color-muted: oklch(0.2 0 0);
+  --color-muted-foreground: oklch(0.6 0 0);
+  --color-accent: oklch(0.2 0 0);
+  --color-accent-foreground: oklch(0.95 0 0);
+  --color-destructive: oklch(0.62 0.2 22);
+  --color-destructive-foreground: oklch(0.12 0 0);
+  --color-border: oklch(0.24 0 0);
+  --color-input: oklch(0.24 0 0);
+  --color-ring: oklch(0.62 0.14 175);
+
+  --color-chart-1: oklch(0.62 0.14 175);        /* teal */
+  --color-chart-2: oklch(0.65 0.13 145);         /* emerald */
+  --color-chart-3: oklch(0.7 0.12 65);           /* amber */
+  --color-chart-4: oklch(0.58 0.15 355);         /* rose */
+  --color-chart-5: oklch(0.55 0.1 235);          /* steel blue */
+
+  --color-sidebar: oklch(0.14 0.005 180);
+  --color-sidebar-foreground: oklch(0.95 0 0);
+  --color-sidebar-primary: oklch(0.62 0.14 175);
+  --color-sidebar-primary-foreground: oklch(0.12 0 0);
+  --color-sidebar-accent: oklch(0.2 0 0);
+  --color-sidebar-accent-foreground: oklch(0.95 0 0);
+  --color-sidebar-border: oklch(0.24 0 0);
+  --color-sidebar-ring: oklch(0.62 0.14 175);
+}
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: 'Geist Variable', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  /* ALL RADIUS = 0 (sharp corners) */
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-3xl: 0;
+  --radius-4xl: 0;
+}

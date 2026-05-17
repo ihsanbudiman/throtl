@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 102 102" role="img" aria-label="Throtl icon">
+  <title>Throtl icon</title>
+  <g transform="translate(51, 51)">
+    <circle cx="0" cy="0" r="48" fill="none" stroke="#0D9488" stroke-width="6"/>
+    <g transform="rotate(-22)">
+      <rect x="-36" y="-7" width="72" height="14" rx="7" fill="#0D9488"/>
+    </g>
+  </g>
+</svg>
