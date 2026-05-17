@@ -2,13 +2,13 @@
 
 **Share your AI API access — without sharing your keys.**
 
-Throtl is a self-hosted API gateway that lets you share access to AI providers (OpenAI, Anthropic, any OpenAI-compatible API) with your team, friends, or clients — while keeping full control over who uses what, and how much.
+Throtl is an API gateway that lets you share your AI subscription — GLM 5.1, Kimi K2.6, or any OpenAI-compatible provider — with your team, friends, or clients, while keeping full control over who uses what, and how much.
 
 ---
 
 ## Why Throtl?
 
-You have an OpenAI API key. Your teammate needs GPT-4 access. You don't want to hand them your key — they might overspend, use models you don't want, or accidentally leak it.
+You have an AI subscription — GLM 5.1, Kimi K2.6, or any OpenAI-compatible provider. Your teammate needs access too. You don't want to hand them your API key — they might overspend, use models you don't want, or accidentally leak it.
 
 Throtl sits between your users and the AI provider. You keep your real API key safe. Everyone else gets a share key (`sk-share-...`) that you control.
 
@@ -119,7 +119,7 @@ curl https://your-throtl/v1/models \
 |---------|------|
 | Dashboard | http://localhost:3000 |
 | Gateway API | http://localhost:8081 |
-| PostgreSQL | localhost:5433 |
+| PostgreSQL | localhost:5432 |
 
 ---
 
