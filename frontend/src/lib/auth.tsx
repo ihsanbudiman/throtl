@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { api } from "@/lib/api";
 
@@ -28,7 +29,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [setupRequired, setSetupRequired] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const tokenRef = useRef(token);
-  tokenRef.current = token;
+
+  useEffect(() => { tokenRef.current = token; }, [token]);
 
   // Check setup status on mount
   useEffect(() => {

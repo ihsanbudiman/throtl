@@ -1,12 +1,9 @@
+import { lazy, Suspense } from "react";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { Sidebar, type Page } from "@/components/Sidebar";
-import { OverviewPage } from "@/pages/OverviewPage";
-import { KeysPage } from "@/pages/KeysPage";
-import { ProvidersPage } from "@/pages/ProvidersPage";
-import { ModelsPage } from "@/pages/ModelsPage";
-import { UsagePage } from "@/pages/UsagePage";
-import { LoginPage } from "@/pages/LoginPage";
-import { SetupPage } from "@/pages/SetupPage";
+import { ThemeProvider } from "@/hooks/use-theme";
+import { ToastProvider } from "@/hooks/use-toast";
+import { ToastContainer } from "@/components/ToastContainer";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   BrowserRouter,
@@ -16,6 +13,26 @@ import {
   useNavigate,
   useLocation,
 } from "react-router-dom";
+import { cn } from "@/lib/utils";
+
+const OverviewPage = lazy(() => import("@/pages/OverviewPage"));
+const KeysPage = lazy(() => import("@/pages/KeysPage"));
+const ProvidersPage = lazy(() => import("@/pages/ProvidersPage"));
+const ModelsPage = lazy(() => import("@/pages/ModelsPage"));
+const UsagePage = lazy(() => import("@/pages/UsagePage"));
+const LoginPage = lazy(() => import("@/pages/LoginPage"));
+const SetupPage = lazy(() => import("@/pages/SetupPage"));
+
+function PageLoader() {
+  return (
+    <div className="flex min-h-[50vh] items-center justify-center">
+      <div className="flex flex-col items-center gap-3">
+        <div className="h-8 w-8 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+        <p className="text-xs text-muted-foreground">Loading...</p>
+      </div>
+    </div>
+  );
+}
 
 const PATH_TO_PAGE: Record<string, Page> = {
   "/": "overview",
@@ -41,17 +58,28 @@ function AppContent() {
   if (loading || setupRequired === null) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="animate-pulse text-muted-foreground text-sm">Loading...</div>
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+          <div className="animate-pulse text-muted-foreground text-sm">Loading...</div>
+        </div>
       </div>
     );
   }
 
   if (setupRequired) {
-    return <SetupPage />;
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <SetupPage />
+      </Suspense>
+    );
   }
 
   if (!user) {
-    return <LoginPage />;
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <LoginPage />
+      </Suspense>
+    );
   }
 
   const currentPage = PATH_TO_PAGE[location.pathname] ?? "overview";
@@ -64,15 +92,20 @@ function AppContent() {
     <TooltipProvider>
       <div className="min-h-screen bg-background">
         <Sidebar current={currentPage} onNavigate={handleNavigate} />
-        <main className="ml-64 p-8">
-          <Routes>
-            <Route path="/" element={<OverviewPage />} />
-            <Route path="/keys" element={<KeysPage />} />
-            <Route path="/providers" element={<ProvidersPage />} />
-            <Route path="/models" element={<ModelsPage />} />
-            <Route path="/usage" element={<UsagePage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+        <main className={cn(
+          "p-4 sm:p-6 lg:p-8 pt-20 lg:pt-8",
+          "lg:ml-64"
+        )}>
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
+              <Route path="/" element={<OverviewPage />} />
+              <Route path="/keys" element={<KeysPage />} />
+              <Route path="/providers" element={<ProvidersPage />} />
+              <Route path="/models" element={<ModelsPage />} />
+              <Route path="/usage" element={<UsagePage />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
         </main>
       </div>
     </TooltipProvider>
@@ -81,10 +114,15 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <AppContent />
-      </BrowserRouter>
+    <ThemeProvider>
+      <AuthProvider>
+        <ToastProvider>
+          <BrowserRouter>
+          <AppContent />
+          <ToastContainer />
+        </BrowserRouter>
+      </ToastProvider>
     </AuthProvider>
+    </ThemeProvider>
   );
 }
