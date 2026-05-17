@@ -10,10 +10,12 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogTrigger,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import AddProviderDialog from "@/components/AddProviderDialog";
-import { Trash2, Server, Globe, KeyRound } from "lucide-react";
+import { Trash2, Server, Globe, KeyRound, Plus } from "lucide-react";
 
 const PROVIDER_ACCENTS = [
   "from-chart-1/[0.04] to-transparent",
@@ -38,6 +40,14 @@ export default function ProvidersPage() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<Provider | null>(null);
 
+  // Form state
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [formID, setFormID] = useState("");
+  const [formName, setFormName] = useState("");
+  const [formType, setFormType] = useState("openai");
+  const [formBaseURL, setFormBaseURL] = useState("");
+  const [formAPIKey, setFormAPIKey] = useState("");
+
   const loadProviders = useCallback(async () => {
     const p = await api.listProviders();
     setProviders(p || []);
@@ -45,13 +55,25 @@ export default function ProvidersPage() {
   }, []);
 
   useEffect(() => {
-    const fetch = async () => {
-      const p = await api.listProviders();
-      setProviders(p || []);
-      setLoading(false);
-    };
-    fetch();
-  }, []);
+    loadProviders();
+  }, [loadProviders]);
+
+  const handleCreate = async () => {
+    await api.createProvider({
+      id: formID,
+      name: formName,
+      type: formType,
+      base_url: formBaseURL,
+      api_key: formAPIKey,
+    });
+    setDialogOpen(false);
+    setFormID("");
+    setFormName("");
+    setFormType("openai");
+    setFormBaseURL("");
+    setFormAPIKey("");
+    loadProviders();
+  };
 
   const handleDelete = async (id: string) => {
     setDeleting(id);
@@ -99,7 +121,97 @@ export default function ProvidersPage() {
             Manage upstream AI providers and their API keys
           </p>
         </div>
-        <AddProviderDialog onSuccess={loadProviders} />
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Provider
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Add Provider</DialogTitle>
+              <DialogDescription>
+                Connect an upstream AI provider. The API key is stored locally and used to proxy requests.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="pid">Provider ID</Label>
+                <Input
+                  id="pid"
+                  placeholder="e.g. wafer, openai, anthropic"
+                  value={formID}
+                  onChange={(e) => setFormID(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Used in model calls: <code className="bg-muted px-1">{formID || "id"}/model-name</code>
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pname">Provider Name</Label>
+                <Input
+                  id="pname"
+                  placeholder="e.g. OpenAI, Anthropic"
+                  value={formName}
+                  onChange={(e) => setFormName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ptype">Provider Type</Label>
+                <select
+                  id="ptype"
+                  className="flex h-9 w-full rounded-none border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  value={formType}
+                  onChange={(e) => setFormType(e.target.value)}
+                >
+                  <option value="openai">OpenAI Compatible</option>
+                  <option value="anthropic">Anthropic</option>
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  {formType === "openai"
+                    ? "Any API that follows the /v1/chat/completions format"
+                    : "Anthropic Messages API (/v1/messages format)"}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="purl">Base URL</Label>
+                <Input
+                  id="purl"
+                  placeholder="e.g. https://api.openai.com"
+                  value={formBaseURL}
+                  onChange={(e) => setFormBaseURL(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {formType === "openai"
+                    ? "OpenAI-compatible endpoint. No trailing slash."
+                    : "Anthropic API endpoint. e.g. https://api.anthropic.com"}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pkey">API Key</Label>
+                <Input
+                  id="pkey"
+                  type="password"
+                  placeholder="sk-..."
+                  value={formAPIKey}
+                  onChange={(e) => setFormAPIKey(e.target.value)}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCreate}
+                disabled={!formID || !formName || !formBaseURL || !formAPIKey}
+              >
+                Add Provider
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {providers.length === 0 ? (
@@ -128,6 +240,9 @@ export default function ProvidersPage() {
                       <Server className="h-4 w-4" />
                     </div>
                     {p.name}
+                    <Badge variant="outline" className="text-xs ml-2">
+                      {p.type === "anthropic" ? "Anthropic" : "OpenAI"}
+                    </Badge>
                   </CardTitle>
                   <Button
                     variant="ghost"

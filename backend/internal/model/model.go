@@ -34,6 +34,7 @@ type AuthResponse struct {
 type Provider struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
+	Type      string    `json:"type"`
 	BaseURL   string    `json:"base_url"`
 	APIKey    string    `json:"api_key"` // real upstream key, encrypted at rest later
 	CreatedAt time.Time `json:"created_at"`
@@ -79,6 +80,7 @@ type CreateAPIKeyRequest struct {
 type CreateProviderRequest struct {
 	ID      string `json:"id" validate:"required"`
 	Name    string `json:"name" validate:"required"`
+	Type    string `json:"type" validate:"required"`
 	BaseURL string `json:"base_url" validate:"required"`
 	APIKey  string `json:"api_key" validate:"required"`
 }

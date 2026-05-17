@@ -45,7 +45,7 @@ func main() {
 	// Init components
 	rl := middleware.NewRateLimiter(s)
 	h := handler.New(s, jwtSecret, rl)
-	p := proxy.NewOpenAIProxy(s)
+	p := proxy.NewGateway(s)
 
 	// Echo server
 	e := echo.New()
@@ -87,11 +87,12 @@ func main() {
 	// --- Proxy API (consumer-facing, share-key auth) ---
 	proxyGroup := e.Group("/v1", middleware.KeyAuth(s), rl.Middleware())
 	proxyGroup.GET("/models", p.ListModels)
+	proxyGroup.POST("/messages", p.ProxyHandler)
 	proxyGroup.Any("/*", p.ProxyHandler)
 
 	e.Any("/v1", func(c echo.Context) error {
 		return c.JSON(200, map[string]string{
-			"message": "Throtl Gateway — Use /v1/chat/completions, /v1/models, etc.",
+			"message": "Throtl Gateway — Use /v1/chat/completions, /v1/messages, /v1/models, etc.",
 		})
 	})
 
