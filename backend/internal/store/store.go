@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/ihsanbudiman/throtl/internal/model"
@@ -115,6 +116,9 @@ func (s *Store) ListProviders() ([]model.Provider, error) {
 		}
 		result = append(result, p)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
@@ -161,6 +165,9 @@ func (s *Store) ListAPIKeys() ([]model.APIKey, error) {
 		}
 		result = append(result, k)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
@@ -200,12 +207,18 @@ func (s *Store) ToggleAPIKey(id string, active bool) error {
 }
 
 func (s *Store) DeleteAPIKey(id string) error {
-	_, err := s.db.Exec(`DELETE FROM usage_logs WHERE api_key_id = ?`, id)
+	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
-	_, err = s.db.Exec(`DELETE FROM api_keys WHERE id = ?`, id)
-	return err
+	defer tx.Rollback()
+	if _, err := tx.Exec(`DELETE FROM usage_logs WHERE api_key_id = ?`, id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM api_keys WHERE id = ?`, id); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) UpdateLastUsed(id string) error {
@@ -237,6 +250,9 @@ func (s *Store) GetRecentLogs(limit int) ([]model.UsageLog, error) {
 		}
 		result = append(result, l)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
@@ -244,17 +260,31 @@ func (s *Store) GetDashboardStats() (*model.DashboardStats, error) {
 	stats := &model.DashboardStats{}
 
 	// Total keys
-	s.db.QueryRow(`SELECT COUNT(*) FROM api_keys`).Scan(&stats.TotalKeys)
-	s.db.QueryRow(`SELECT COUNT(*) FROM api_keys WHERE active = 1`).Scan(&stats.ActiveKeys)
-	s.db.QueryRow(`SELECT COUNT(*) FROM providers`).Scan(&stats.TotalProviders)
-	s.db.QueryRow(`SELECT COUNT(*) FROM usage_logs`).Scan(&stats.TotalRequests)
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM api_keys`).Scan(&stats.TotalKeys); err != nil {
+		log.Printf("store: failed to query total keys: %v", err)
+	}
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM api_keys WHERE active = 1`).Scan(&stats.ActiveKeys); err != nil {
+		log.Printf("store: failed to query active keys: %v", err)
+	}
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM providers`).Scan(&stats.TotalProviders); err != nil {
+		log.Printf("store: failed to query total providers: %v", err)
+	}
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM usage_logs`).Scan(&stats.TotalRequests); err != nil {
+		log.Printf("store: failed to query total requests: %v", err)
+	}
 
 	// Today's requests
-	s.db.QueryRow(`SELECT COUNT(*) FROM usage_logs WHERE DATE(created_at) = CURRENT_DATE`).Scan(&stats.RequestsToday)
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM usage_logs WHERE DATE(created_at) = CURRENT_DATE`).Scan(&stats.RequestsToday); err != nil {
+		log.Printf("store: failed to query requests today: %v", err)
+	}
 
 	// Token totals
-	s.db.QueryRow(`SELECT COALESCE(SUM(tokens_in), 0) FROM usage_logs`).Scan(&stats.TotalTokensIn)
-	s.db.QueryRow(`SELECT COALESCE(SUM(tokens_out), 0) FROM usage_logs`).Scan(&stats.TotalTokensOut)
+	if err := s.db.QueryRow(`SELECT COALESCE(SUM(tokens_in), 0) FROM usage_logs`).Scan(&stats.TotalTokensIn); err != nil {
+		log.Printf("store: failed to query total tokens in: %v", err)
+	}
+	if err := s.db.QueryRow(`SELECT COALESCE(SUM(tokens_out), 0) FROM usage_logs`).Scan(&stats.TotalTokensOut); err != nil {
+		log.Printf("store: failed to query total tokens out: %v", err)
+	}
 
 	// Recent requests
 	stats.RecentRequests, _ = s.GetRecentLogs(10)
@@ -269,8 +299,13 @@ func (s *Store) GetDashboardStats() (*model.DashboardStats, error) {
 		defer rows.Close()
 		for rows.Next() {
 			var u model.KeyUsageStat
-			rows.Scan(&u.KeyName, &u.KeyPrefix, &u.Requests, &u.TokensIn, &u.TokensOut)
+			if err := rows.Scan(&u.KeyName, &u.KeyPrefix, &u.Requests, &u.TokensIn, &u.TokensOut); err != nil {
+				continue
+			}
 			stats.KeyUsage = append(stats.KeyUsage, u)
+		}
+		if err := rows.Err(); err != nil {
+			log.Printf("store: key usage rows error: %v", err)
 		}
 	}
 
@@ -283,8 +318,13 @@ func (s *Store) GetDashboardStats() (*model.DashboardStats, error) {
 		defer rows2.Close()
 		for rows2.Next() {
 			var m model.ModelStat
-			rows2.Scan(&m.Model, &m.Requests, &m.TokensIn, &m.TokensOut)
+			if err := rows2.Scan(&m.Model, &m.Requests, &m.TokensIn, &m.TokensOut); err != nil {
+				continue
+			}
 			stats.ModelBreakdown = append(stats.ModelBreakdown, m)
+		}
+		if err := rows2.Err(); err != nil {
+			log.Printf("store: model breakdown rows error: %v", err)
 		}
 	}
 
@@ -328,7 +368,7 @@ func (s *Store) GetDailyCount(keyID string) (date string, count int, err error) 
 	if err == sql.ErrNoRows {
 		return "", 0, nil
 	}
-	if ns.Valid {
+	if ns.Valid && len(ns.String) >= 10 {
 		date = ns.String[:10]
 	}
 	return
@@ -394,6 +434,9 @@ func (s *Store) ListModelOverrides() ([]model.ModelOverride, error) {
 			return nil, err
 		}
 		result = append(result, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return result, nil
 }
