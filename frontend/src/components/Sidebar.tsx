@@ -3,6 +3,8 @@ import ThrotlIcon from "@/assets/throtl-icon.svg";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 export type Page = "overview" | "keys" | "providers" | "models" | "usage";
 
@@ -54,6 +56,7 @@ function NavItem({ item, current, onNavigate, onClick }: { item: NavItem; curren
 export function Sidebar({ current, onNavigate }: SidebarProps) {
   const { user, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [logoutOpen, setLogoutOpen] = useState(false);
 
   const handleNavigate = (page: Page) => {
     onNavigate(page);
@@ -78,7 +81,7 @@ export function Sidebar({ current, onNavigate }: SidebarProps) {
       </nav>
       <div className="border-t border-sidebar-border px-3 py-3 space-y-0.5">
         <button
-          onClick={logout}
+          onClick={() => setLogoutOpen(true)}
           className="flex w-full items-center gap-3 px-3 py-2 text-sm font-[400] text-body-mid hover:text-destructive transition-all duration-150"
         >
           <LogOut className="h-4 w-4 shrink-0" />
@@ -131,6 +134,23 @@ export function Sidebar({ current, onNavigate }: SidebarProps) {
       <aside className="hidden lg:flex fixed left-0 top-0 z-30 h-screen w-60 border-r border-sidebar-border bg-sidebar flex-col">
         {sidebarContent}
       </aside>
+
+      <Dialog open={logoutOpen} onOpenChange={setLogoutOpen}>
+        <DialogContent showCloseButton={false} className="max-w-xs">
+          <DialogHeader>
+            <DialogTitle>Sign out?</DialogTitle>
+            <DialogDescription>You'll need to sign in again to access the dashboard.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setLogoutOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" size="sm" onClick={() => { logout(); setLogoutOpen(false); }}>
+              Sign out
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
