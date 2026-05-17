@@ -50,11 +50,6 @@ func main() {
 	// Echo server
 	e := echo.New()
 	e.HideBanner = true
-	e.Use(echomw.LoggerWithConfig(echomw.LoggerConfig{
-		Skipper: func(c echo.Context) bool {
-			return true
-		},
-	}))
 	e.Use(echomw.CORSWithConfig(echomw.CORSConfig{
 		AllowOrigins: []string{"*"},
 		AllowMethods: []string{echo.GET, echo.POST, echo.PUT, echo.DELETE, echo.OPTIONS, echo.PATCH},

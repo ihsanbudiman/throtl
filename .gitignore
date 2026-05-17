@@ -3,3 +3,4 @@ dist/
 *.db
 shareai-server
 .env
+backend/server
