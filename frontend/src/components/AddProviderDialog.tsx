@@ -27,6 +27,13 @@ export default function AddProviderDialog({ onSuccess }: AddProviderDialogProps)
   const [formBaseURL, setFormBaseURL] = useState("");
   const [formAPIKey, setFormAPIKey] = useState("");
 
+  const resetForm = () => {
+    setFormID("");
+    setFormName("");
+    setFormBaseURL("");
+    setFormAPIKey("");
+  };
+
   const handleCreate = async () => {
     await api.createProvider({
       id: formID,
@@ -35,16 +42,13 @@ export default function AddProviderDialog({ onSuccess }: AddProviderDialogProps)
       api_key: formAPIKey,
     });
     setOpen(false);
-    setFormID("");
-    setFormName("");
-    setFormBaseURL("");
-    setFormAPIKey("");
+    resetForm();
     toast({ title: "Provider added", description: formName, variant: "success" });
     onSuccess();
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(open) => { setOpen(open); if (!open) resetForm(); }}>
       <DialogTrigger>
         <Button>
           <Plus className="h-4 w-4 mr-2" />
@@ -66,6 +70,7 @@ export default function AddProviderDialog({ onSuccess }: AddProviderDialogProps)
               id="pid"
               placeholder="e.g. wafer, openai, anthropic"
               value={formID}
+              autoComplete="off"
               onChange={(e) =>
                 setFormID(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))
               }
@@ -83,6 +88,7 @@ export default function AddProviderDialog({ onSuccess }: AddProviderDialogProps)
               id="pname"
               placeholder="e.g. OpenAI, Anthropic"
               value={formName}
+              autoComplete="off"
               onChange={(e) => setFormName(e.target.value)}
             />
           </div>
@@ -92,6 +98,7 @@ export default function AddProviderDialog({ onSuccess }: AddProviderDialogProps)
               id="purl"
               placeholder="e.g. https://api.openai.com"
               value={formBaseURL}
+              autoComplete="off"
               onChange={(e) => setFormBaseURL(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
@@ -105,6 +112,7 @@ export default function AddProviderDialog({ onSuccess }: AddProviderDialogProps)
               type="password"
               placeholder="sk-..."
               value={formAPIKey}
+              autoComplete="new-password"
               onChange={(e) => setFormAPIKey(e.target.value)}
             />
           </div>

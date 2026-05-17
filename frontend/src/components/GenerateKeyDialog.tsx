@@ -28,6 +28,14 @@ export default function GenerateKeyDialog({ onSuccess }: GenerateKeyDialogProps)
   const [formWindowHrs, setFormWindowHrs] = useState("5");
   const [formModels, setFormModels] = useState("");
 
+  const resetForm = () => {
+    setFormName("");
+    setFormLimitWindow("");
+    setFormLimitDaily("");
+    setFormWindowHrs("5");
+    setFormModels("");
+  };
+
   const handleCreate = async () => {
     const key = await api.createKey({
       name: formName,
@@ -37,17 +45,13 @@ export default function GenerateKeyDialog({ onSuccess }: GenerateKeyDialogProps)
       allowed_models: formModels,
     });
     setOpen(false);
-    setFormName("");
-    setFormLimitWindow("");
-    setFormLimitDaily("");
-    setFormWindowHrs("5");
-    setFormModels("");
+    resetForm();
     toast({ title: "Key created", description: key.name, variant: "success" });
     onSuccess(key);
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(open) => { setOpen(open); if (!open) resetForm(); }}>
       <DialogTrigger>
         <Button>
           <Plus className="h-4 w-4 mr-2" />
@@ -69,6 +73,7 @@ export default function GenerateKeyDialog({ onSuccess }: GenerateKeyDialogProps)
               id="name"
               placeholder="e.g. Team Alpha"
               value={formName}
+              autoComplete="off"
               onChange={(e) => setFormName(e.target.value)}
             />
           </div>
@@ -80,6 +85,7 @@ export default function GenerateKeyDialog({ onSuccess }: GenerateKeyDialogProps)
                 type="number"
                 placeholder="0 = unlimited"
                 value={formLimitWindow}
+                autoComplete="off"
                 onChange={(e) => setFormLimitWindow(e.target.value)}
               />
             </div>
@@ -91,6 +97,7 @@ export default function GenerateKeyDialog({ onSuccess }: GenerateKeyDialogProps)
                 min="1"
                 placeholder="5"
                 value={formWindowHrs}
+                autoComplete="off"
                 onChange={(e) => setFormWindowHrs(e.target.value)}
               />
             </div>
@@ -101,6 +108,7 @@ export default function GenerateKeyDialog({ onSuccess }: GenerateKeyDialogProps)
                 type="number"
                 placeholder="0 = unlimited"
                 value={formLimitDaily}
+                autoComplete="off"
                 onChange={(e) => setFormLimitDaily(e.target.value)}
               />
             </div>
@@ -111,6 +119,7 @@ export default function GenerateKeyDialog({ onSuccess }: GenerateKeyDialogProps)
               id="models"
               placeholder="e.g. gpt-4o,gpt-4o-mini (empty = all)"
               value={formModels}
+              autoComplete="off"
               onChange={(e) => setFormModels(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
