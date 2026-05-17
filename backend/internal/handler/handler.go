@@ -330,12 +330,13 @@ func (h *Handler) generateToken(userID string) (string, error) {
 }
 
 type ModelEntry struct {
-	ID         string `json:"id"`
-	Object     string `json:"object"`
-	Created    int64  `json:"created"`
-	OwnedBy    string `json:"owned_by"`
-	ProviderID string `json:"provider_id"`
-	Active     bool   `json:"active"`
+	ID               string `json:"id"`
+	Object           string `json:"object"`
+	Created          int64  `json:"created"`
+	OwnedBy          string `json:"owned_by"`
+	ProviderID       string `json:"provider_id"`
+	Active           bool   `json:"active"`
+	RequestMultiplier int   `json:"request_multiplier"`
 }
 
 func (h *Handler) ListModels(c echo.Context) error {
@@ -348,10 +349,10 @@ func (h *Handler) ListModels(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to list model overrides"})
 	}
-	overrideMap := make(map[string]bool)
+	overrideMap := make(map[string]model.ModelOverride)
 	for _, o := range overrides {
 		key := o.ProviderID + "/" + o.ModelName
-		overrideMap[key] = o.Active
+		overrideMap[key] = o
 	}
 
 	gw := proxy.NewGateway(h.store)
@@ -365,18 +366,20 @@ func (h *Handler) ListModels(c echo.Context) error {
 
 		for _, m := range models {
 			prefixedID := provider.ID + "/" + m.ID
-			active := true
-			if dbActive, exists := overrideMap[prefixedID]; exists {
-				active = dbActive
+			entry := ModelEntry{
+				ID:               prefixedID,
+				Object:           "model",
+				Created:          m.Created,
+				OwnedBy:          provider.ID,
+				ProviderID:       provider.ID,
+				Active:           true,
+				RequestMultiplier: 1,
 			}
-			data = append(data, ModelEntry{
-				ID:         prefixedID,
-				Object:     "model",
-				Created:    m.Created,
-				OwnedBy:    provider.ID,
-				ProviderID: provider.ID,
-				Active:     active,
-			})
+			if o, exists := overrideMap[prefixedID]; exists {
+				entry.Active = o.Active
+				entry.RequestMultiplier = o.RequestMultiplier
+			}
+			data = append(data, entry)
 		}
 	}
 
@@ -388,7 +391,6 @@ func (h *Handler) ListModels(c echo.Context) error {
 
 func (h *Handler) ToggleModel(c echo.Context) error {
 	modelID := c.Param("id")
-	active := c.QueryParam("active") == "true"
 
 	parts := strings.SplitN(modelID, "/", 2)
 	if len(parts) != 2 {
@@ -401,12 +403,29 @@ func (h *Handler) ToggleModel(c echo.Context) error {
 		return c.JSON(http.StatusNotFound, map[string]string{"error": "Provider not found"})
 	}
 
+	var req model.UpdateModelOverrideRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+	}
+
+	// Fall back to query param for backward compatibility
+	if req.Active == nil {
+		active := c.QueryParam("active") == "true"
+		req.Active = &active
+	}
+
+	multiplier := 1
+	if req.RequestMultiplier != nil && *req.RequestMultiplier > 0 {
+		multiplier = *req.RequestMultiplier
+	}
+
 	override := &model.ModelOverride{
-		ID:         modelID,
-		ProviderID: providerID,
-		ModelName:  modelName,
-		Active:     active,
-		CreatedAt:  time.Now(),
+		ID:                modelID,
+		ProviderID:        providerID,
+		ModelName:         modelName,
+		Active:            *req.Active,
+		RequestMultiplier:  multiplier,
+		CreatedAt:         time.Now(),
 	}
 	if err := h.store.UpsertModelOverride(override); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})

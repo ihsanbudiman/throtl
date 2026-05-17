@@ -110,6 +110,11 @@ func (g *Gateway) ProxyHandler(c echo.Context) error {
 		})
 	}
 
+	// Apply request multiplier: rate limiter already counted 1, add extra if multiplier > 1
+	if override != nil && override.RequestMultiplier > 1 {
+		c.Set("throtl_request_multiplier", override.RequestMultiplier)
+	}
+
 	// Normalize: if the request is in Anthropic format, convert to OpenAI format
 	// so both adapters always receive OpenAI-format input.
 	// AnthropicAdapter will then convert OpenAI→Anthropic for the upstream.
@@ -119,7 +124,18 @@ func (g *Gateway) ProxyHandler(c echo.Context) error {
 	}
 
 	adapter := NewAdapter(provider.Type, g.store)
-	return adapter.ProxyChat(c, provider, body, actualModel, reqModel, keyID)
+	if err := adapter.ProxyChat(c, provider, body, actualModel, reqModel, keyID); err != nil {
+		return err
+	}
+
+	// Apply request multiplier correction after successful proxy
+	if mult, ok := c.Get("throtl_request_multiplier").(int); ok && mult > 1 {
+		if err := g.store.IncrementWindowCountBy(keyID, mult-1); err != nil {
+			log.Printf("Failed to apply request multiplier: %v", err)
+		}
+	}
+
+	return nil
 }
 
 func (g *Gateway) ListModels(c echo.Context) error {
