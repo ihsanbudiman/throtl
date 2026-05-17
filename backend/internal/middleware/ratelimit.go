@@ -158,19 +158,27 @@ func (rl *RateLimiter) Middleware() echo.MiddlewareFunc {
 func KeyAuth(s *store.Store) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
+			token := ""
+
 			auth := c.Request().Header.Get("Authorization")
-			if auth == "" {
+			if auth != "" {
+				token = auth
+				if len(auth) > 7 && auth[:7] == "Bearer " {
+					token = auth[7:]
+				}
+			}
+
+			if token == "" {
+				token = c.Request().Header.Get("x-api-key")
+			}
+
+			if token == "" {
 				return c.JSON(http.StatusUnauthorized, map[string]interface{}{
 					"error": map[string]string{
-						"message": "Missing Authorization header",
+						"message": "Missing Authorization header or x-api-key",
 						"type":    "authentication_error",
 					},
 				})
-			}
-
-			token := auth
-			if len(auth) > 7 && auth[:7] == "Bearer " {
-				token = auth[7:]
 			}
 
 			key, err := s.GetAPIKeyByShareKey(token)

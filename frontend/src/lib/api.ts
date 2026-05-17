@@ -38,6 +38,7 @@ async function request<T>(path: string, opts?: RequestInit): Promise<T> {
 export interface Provider {
   id: string;
   name: string;
+  type: string;  // "openai" | "anthropic"
   base_url: string;
   api_key: string;
   created_at: string;
@@ -147,7 +148,7 @@ export const api = {
 
   // Providers
   listProviders: () => request<Provider[]>("/api/providers"),
-  createProvider: (data: { id: string; name: string; base_url: string; api_key: string }) =>
+  createProvider: (data: { id: string; name: string; type: string; base_url: string; api_key: string }) =>
     request<Provider>("/api/providers", { method: "POST", body: JSON.stringify(data) }),
   deleteProvider: (id: string) =>
     request<void>(`/api/providers/${id}`, { method: "DELETE" }),

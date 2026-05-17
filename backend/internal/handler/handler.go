@@ -1,8 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
-	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -14,14 +12,14 @@ import (
 
 	"github.com/ihsanbudiman/throtl/internal/middleware"
 	"github.com/ihsanbudiman/throtl/internal/model"
+	"github.com/ihsanbudiman/throtl/internal/proxy"
 	"github.com/ihsanbudiman/throtl/internal/store"
 )
 
 type Handler struct {
-	store       *store.Store
-	jwtSecret   []byte
-	rl          RateLimitStatusProvider
-	modelClient *http.Client
+	store     *store.Store
+	jwtSecret []byte
+	rl        RateLimitStatusProvider
 }
 
 type RateLimitStatusProvider interface {
@@ -30,10 +28,9 @@ type RateLimitStatusProvider interface {
 
 func New(s *store.Store, jwtSecret string, rl RateLimitStatusProvider) *Handler {
 	return &Handler{
-		store:       s,
-		jwtSecret:   []byte(jwtSecret),
-		rl:          rl,
-		modelClient: &http.Client{Timeout: 10 * time.Second},
+		store:     s,
+		jwtSecret: []byte(jwtSecret),
+		rl:        rl,
 	}
 }
 
@@ -165,6 +162,10 @@ func (h *Handler) CreateProvider(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "id, name, base_url, and api_key are required"})
 	}
 
+	if req.Type != "openai" && req.Type != "anthropic" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "type must be 'openai' or 'anthropic'"})
+	}
+
 	if !isValidID(req.ID) {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "id must be lowercase alphanumeric with hyphens (e.g. wafer, openai-us)"})
 	}
@@ -172,6 +173,7 @@ func (h *Handler) CreateProvider(c echo.Context) error {
 	p := &model.Provider{
 		ID:        req.ID,
 		Name:      req.Name,
+		Type:      req.Type,
 		BaseURL:   strings.TrimRight(req.BaseURL, "/"),
 		APIKey:    req.APIKey,
 		CreatedAt: time.Now(),
@@ -181,7 +183,8 @@ func (h *Handler) CreateProvider(c echo.Context) error {
 	}
 
 	go func() {
-		models, err := fetchUpstreamModels(h.modelClient, p.BaseURL, p.APIKey)
+		gw := proxy.NewGateway(h.store)
+		models, err := gw.FetchModelsForProvider(p)
 		if err != nil {
 			log.Printf("Failed to fetch models from %s on creation: %v", p.ID, err)
 			return
@@ -335,37 +338,6 @@ type ModelEntry struct {
 	Active     bool   `json:"active"`
 }
 
-type upstreamModel struct {
-	ID      string `json:"id"`
-	Created int64  `json:"created"`
-	OwnedBy string `json:"owned_by"`
-}
-
-func fetchUpstreamModels(client *http.Client, baseURL, apiKey string) ([]upstreamModel, error) {
-	url := strings.TrimRight(baseURL, "/") + "/models"
-	req, _ := http.NewRequest("GET", url, nil)
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	var listResp struct {
-		Data []upstreamModel `json:"data"`
-	}
-	if err := json.Unmarshal(body, &listResp); err != nil {
-		return nil, err
-	}
-	return listResp.Data, nil
-}
-
 func (h *Handler) ListModels(c echo.Context) error {
 	providers, err := h.store.ListProviders()
 	if err != nil {
@@ -382,9 +354,10 @@ func (h *Handler) ListModels(c echo.Context) error {
 		overrideMap[key] = o.Active
 	}
 
+	gw := proxy.NewGateway(h.store)
 	var data []ModelEntry
 	for _, provider := range providers {
-		models, err := fetchUpstreamModels(h.modelClient, provider.BaseURL, provider.APIKey)
+		models, err := gw.FetchModelsForProvider(&provider)
 		if err != nil {
 			log.Printf("Failed to fetch models from %s: %v", provider.ID, err)
 			continue

@@ -36,6 +36,7 @@ func (s *Store) migrate() error {
 		`CREATE TABLE IF NOT EXISTS providers (
 			id TEXT PRIMARY KEY,
 			name TEXT NOT NULL,
+			type TEXT NOT NULL DEFAULT 'openai',
 			base_url TEXT NOT NULL,
 			api_key TEXT NOT NULL,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -91,19 +92,22 @@ func (s *Store) migrate() error {
 		}
 	}
 
+	// Backward-compatible: add type column to existing databases
+	s.db.Exec(`ALTER TABLE providers ADD COLUMN type TEXT NOT NULL DEFAULT 'openai'`)
+
 	return nil
 }
 
 // --- Providers ---
 
 func (s *Store) CreateProvider(p *model.Provider) error {
-	_, err := s.db.Exec(`INSERT INTO providers (id, name, base_url, api_key, created_at) VALUES (?, ?, ?, ?, ?)`,
-		p.ID, p.Name, p.BaseURL, p.APIKey, p.CreatedAt)
+	_, err := s.db.Exec(`INSERT INTO providers (id, name, type, base_url, api_key, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		p.ID, p.Name, p.Type, p.BaseURL, p.APIKey, p.CreatedAt)
 	return err
 }
 
 func (s *Store) ListProviders() ([]model.Provider, error) {
-	rows, err := s.db.Query(`SELECT id, name, base_url, api_key, created_at FROM providers ORDER BY created_at DESC`)
+	rows, err := s.db.Query(`SELECT id, name, type, base_url, api_key, created_at FROM providers ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +115,7 @@ func (s *Store) ListProviders() ([]model.Provider, error) {
 	result := make([]model.Provider, 0)
 	for rows.Next() {
 		var p model.Provider
-		if err := rows.Scan(&p.ID, &p.Name, &p.BaseURL, &p.APIKey, &p.CreatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Type, &p.BaseURL, &p.APIKey, &p.CreatedAt); err != nil {
 			return nil, err
 		}
 		result = append(result, p)
@@ -124,8 +128,8 @@ func (s *Store) ListProviders() ([]model.Provider, error) {
 
 func (s *Store) GetProvider(id string) (*model.Provider, error) {
 	var p model.Provider
-	err := s.db.QueryRow(`SELECT id, name, base_url, api_key, created_at FROM providers WHERE id = ?`, id).
-		Scan(&p.ID, &p.Name, &p.BaseURL, &p.APIKey, &p.CreatedAt)
+	err := s.db.QueryRow(`SELECT id, name, type, base_url, api_key, created_at FROM providers WHERE id = ?`, id).
+		Scan(&p.ID, &p.Name, &p.Type, &p.BaseURL, &p.APIKey, &p.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}

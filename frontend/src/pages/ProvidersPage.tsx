@@ -44,6 +44,7 @@ export function ProvidersPage() {
   // Form state
   const [formID, setFormID] = useState("");
   const [formName, setFormName] = useState("");
+  const [formType, setFormType] = useState("openai");
   const [formBaseURL, setFormBaseURL] = useState("");
   const [formAPIKey, setFormAPIKey] = useState("");
 
@@ -61,12 +62,14 @@ export function ProvidersPage() {
     await api.createProvider({
       id: formID,
       name: formName,
+      type: formType,
       base_url: formBaseURL,
       api_key: formAPIKey,
     });
     setDialogOpen(false);
     setFormID("");
     setFormName("");
+    setFormType("openai");
     setFormBaseURL("");
     setFormAPIKey("");
     loadData();
@@ -154,6 +157,23 @@ export function ProvidersPage() {
                 />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="ptype">Provider Type</Label>
+                <select
+                  id="ptype"
+                  className="flex h-9 w-full rounded-none border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  value={formType}
+                  onChange={(e) => setFormType(e.target.value)}
+                >
+                  <option value="openai">OpenAI Compatible</option>
+                  <option value="anthropic">Anthropic</option>
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  {formType === "openai"
+                    ? "Any API that follows the /v1/chat/completions format"
+                    : "Anthropic Messages API (/v1/messages format)"}
+                </p>
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="purl">Base URL</Label>
                 <Input
                   id="purl"
@@ -162,7 +182,9 @@ export function ProvidersPage() {
                   onChange={(e) => setFormBaseURL(e.target.value)}
                 />
                 <p className="text-xs text-muted-foreground">
-                  OpenAI-compatible endpoint. No trailing slash.
+                  {formType === "openai"
+                    ? "OpenAI-compatible endpoint. No trailing slash."
+                    : "Anthropic API endpoint. e.g. https://api.anthropic.com"}
                 </p>
               </div>
               <div className="space-y-2">
@@ -219,6 +241,9 @@ export function ProvidersPage() {
                       <Server className="h-4 w-4" />
                     </div>
                     {p.name}
+                    <Badge variant="outline" className="text-xs ml-2">
+                      {p.type === "anthropic" ? "Anthropic" : "OpenAI"}
+                    </Badge>
                   </CardTitle>
                   <DropdownMenu>
                     <DropdownMenuTrigger>
