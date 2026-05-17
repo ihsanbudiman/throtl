@@ -4,6 +4,8 @@
 
 Throtl is an API gateway that lets you share your AI subscription — GLM 5.1, Kimi K2.6, or any OpenAI-compatible provider — with your team, friends, or clients, while keeping full control over who uses what, and how much.
 
+> **Note:** Throtl currently supports OpenAI-compatible providers only (any API that follows the `/v1/chat/completions` and `/v1/models` convention).
+
 ---
 
 ## Why Throtl?
@@ -50,7 +52,7 @@ One admin account. No role management, no team invites, no SSO. Simple.
 ## How It Works
 
 ```
-Your User → sk-share-... → Throtl Gateway → Your Provider API Key → OpenAI / Anthropic / ...
+Your User → sk-share-... → Throtl Gateway → Your Provider API Key → OpenAI-compatible Provider
                                 │
                                 ├── Rate Limiter (window + daily)
                                 ├── Model Access Control
@@ -58,7 +60,7 @@ Your User → sk-share-... → Throtl Gateway → Your Provider API Key → Open
                                 └── Request Proxy
 ```
 
-1. You add your provider (e.g. OpenAI) with its real API key
+1. You add your provider (e.g. any OpenAI-compatible API) with its real API key
 2. You create a share key with limits and allowed models
 3. Your user calls `https://your-throtl/v1/chat/completions` with their share key
 4. Throtl checks limits, verifies the model is allowed, proxies the request, and logs usage
@@ -86,7 +88,7 @@ That's it. Open **http://localhost:3000** and create your admin account.
 ### First-Time Setup
 
 1. You'll see the setup page — create your admin email and password
-2. Add a **Provider** (e.g. OpenAI with your API key and `https://api.openai.com/v1` as the base URL)
+2. Add a **Provider** — any OpenAI-compatible API (e.g. `https://api.openai.com/v1`, or your self-hosted endpoint) with your API key
 3. Create an **API Key** — set rate limits and allowed models
 4. Share the generated `sk-share-...` key with your user
 
@@ -99,12 +101,12 @@ curl https://your-throtl/v1/chat/completions \
   -H "Authorization: Bearer sk-share-..." \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "wafer/gpt-4o",
+    "model": "provider-id/GLM-5.1",
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
 ```
 
-The model name uses the format `provider-id/model-name` (e.g. `wafer/gpt-4o`). Users can discover available models:
+The model name uses the format `provider-id/model-name` (e.g. `wafer/GLM-5.1`). Users can discover available models:
 
 ```bash
 curl https://your-throtl/v1/models \
@@ -162,4 +164,4 @@ docker compose down -v
 
 ## License
 
-MIT
+MIT — do whatever you want, just keep the license notice.
