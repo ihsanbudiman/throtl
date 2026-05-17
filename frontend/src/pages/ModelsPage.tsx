@@ -3,11 +3,11 @@ import { api, type Model, type Provider } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useDebounce } from "@/lib/useDebounce";
 import { useToast } from "@/hooks/use-toast";
-import { Cpu, RefreshCw, Search } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { Cpu, RefreshCw, Search, GripHorizontal } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -26,6 +26,7 @@ export default function ModelsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedProviderIds, setSelectedProviderIds] = useState<string[]>([]);
+  const [editingMultiplier, setEditingMultiplier] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     const [modelsResp, provs] = await Promise.all([api.listModels(), api.listProviders()]);
@@ -53,6 +54,24 @@ export default function ModelsPage() {
     setModels((prev) => prev.map((m) => (m.id === modelId ? { ...m, active: newActive } : m)));
     try { await api.toggleModel(modelId, newActive); toast({ title: newActive ? "Model enabled" : "Model disabled", variant: "success" }); }
     catch { setModels((prev) => prev.map((m) => (m.id === modelId ? { ...m, active: currentActive } : m))); toast({ title: "Failed to update model", variant: "destructive" }); }
+  };
+
+  const handleMultiplierChange = async (modelId: string, value: string) => {
+    const mult = parseInt(value, 10);
+    if (isNaN(mult) || mult < 1) {
+      toast({ title: "Multiplier must be a positive number", variant: "destructive" });
+      return;
+    }
+    const prevMult = models.find((m) => m.id === modelId)?.request_multiplier ?? 1;
+    setModels((prev) => prev.map((m) => (m.id === modelId ? { ...m, request_multiplier: mult } : m)));
+    try {
+      await api.updateModel(modelId, { request_multiplier: mult });
+      toast({ title: `Multiplier set to ${mult}x`, variant: "success" });
+    } catch {
+      setModels((prev) => prev.map((m) => (m.id === modelId ? { ...m, request_multiplier: prevMult } : m)));
+      toast({ title: "Failed to update multiplier", variant: "destructive" });
+    }
+    setEditingMultiplier(null);
   };
 
   const providerMap = useMemo(() => Object.fromEntries(providers.map((p) => [p.id, p])), [providers]);
@@ -159,17 +178,18 @@ export default function ModelsPage() {
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Provider</TableHead>
-                  <TableHead>Model ID</TableHead>
-                  <TableHead>Call As</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
+                  <TableRow>
+                    <TableHead>Provider</TableHead>
+                    <TableHead>Model ID</TableHead>
+                    <TableHead>Call As</TableHead>
+                    <TableHead>Req. Weight</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center text-muted-foreground text-sm py-8">
+                    <TableCell                     colSpan={5} className="text-center text-muted-foreground text-sm py-8">
                       No models match the current filters.
                     </TableCell>
                   </TableRow>
@@ -189,6 +209,28 @@ export default function ModelsPage() {
                         </TableCell>
                         <TableCell className="font-mono text-sm">{bareId}</TableCell>
                         <TableCell><code className="text-xs bg-muted px-2 py-0.5 rounded border border-border/40">{m.id}</code></TableCell>
+                        <TableCell>
+                          {editingMultiplier === m.id ? (
+                            <Input
+                              type="number"
+                              min={1}
+                              defaultValue={m.request_multiplier ?? 1}
+                              className="h-7 w-16 text-xs text-center"
+                              autoFocus
+                              onBlur={(e) => handleMultiplierChange(m.id, e.target.value)}
+                              onKeyDown={(e) => { if (e.key === "Enter") handleMultiplierChange(m.id, (e.target as HTMLInputElement).value); if (e.key === "Escape") setEditingMultiplier(null); }}
+                            />
+                          ) : (
+                            <button
+                              className="inline-flex items-center gap-1 text-xs font-mono bg-muted px-2 py-1 rounded border border-border/40 hover:bg-accent transition-colors cursor-pointer min-w-[3rem] justify-center"
+                              onClick={() => setEditingMultiplier(m.id)}
+                              title="Click to edit request weight"
+                            >
+                              <GripHorizontal className="h-3 w-3 text-muted-foreground" />
+                              {m.request_multiplier ?? 1}x
+                            </button>
+                          )}
+                        </TableCell>
                         <TableCell><Switch checked={m.active} onCheckedChange={() => handleToggle(m.id, m.active)} /></TableCell>
                       </TableRow>
                     );

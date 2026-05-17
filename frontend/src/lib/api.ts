@@ -115,6 +115,7 @@ export interface Model {
   owned_by: string;
   provider_id: string;
   active: boolean;
+  request_multiplier: number;
 }
 
 export interface AuthUser {
@@ -171,4 +172,6 @@ export const api = {
   listModels: () => request<{ object: string; data: Model[] }>("/api/models"),
   toggleModel: (id: string, active: boolean) =>
     request<void>(`/api/models/${id}?active=${active}`, { method: "PATCH" }),
+  updateModel: (id: string, data: { active?: boolean; request_multiplier?: number }) =>
+    request<Model>(`/api/models/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
 };
