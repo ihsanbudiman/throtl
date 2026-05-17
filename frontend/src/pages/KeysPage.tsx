@@ -2,14 +2,13 @@ import { useEffect, useState } from "react";
 import { api, type APIKey } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Copy, Trash2, Check, KeyRound, Infinity } from "lucide-react";
+import GenerateKeyDialog from "@/components/GenerateKeyDialog";
+import { Copy, Trash2, Check, KeyRound, Infinity } from "lucide-react";
 
 function formatResetTime(iso: string): string {
   const d = new Date(iso);
@@ -32,24 +31,17 @@ export default function KeysPage() {
   const { toast } = useToast();
   const [keys, setKeys] = useState<APIKey[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [newKey, setNewKey] = useState<APIKey | null>(null);
   const [deleteKey, setDeleteKey] = useState<APIKey | null>(null);
-  const [formName, setFormName] = useState("");
-  const [formLimitWindow, setFormLimitWindow] = useState("");
-  const [formLimitDaily, setFormLimitDaily] = useState("");
-  const [formWindowHrs, setFormWindowHrs] = useState("5");
-  const [formModels, setFormModels] = useState("");
 
   const loadData = async () => { const k = await api.listKeys(); setKeys(k || []); setLoading(false); };
 
   useEffect(() => { loadData(); }, []);
 
-  const handleCreate = async () => {
-    const key = await api.createKey({ name: formName, limit_window: formLimitWindow ? parseInt(formLimitWindow) : 0, limit_daily: formLimitDaily ? parseInt(formLimitDaily) : 0, limit_window_hrs: formWindowHrs ? parseInt(formWindowHrs) : 5, allowed_models: formModels });
-    setNewKey(key); setDialogOpen(false); setFormName(""); setFormLimitWindow(""); setFormLimitDaily(""); setFormWindowHrs("5"); setFormModels("");
-    toast({ title: "Key created", description: key.name, variant: "success" }); loadData();
+  const handleCreateSuccess = (key: APIKey) => {
+    setNewKey(key);
+    loadData();
   };
 
   const handleToggle = async (id: string, active: boolean) => { await api.toggleKey(id, !active); loadData(); };
@@ -80,44 +72,7 @@ export default function KeysPage() {
           <h2 className="text-2xl font-[400] tracking-tight">API Keys</h2>
           <p className="text-muted-foreground text-sm mt-1">Generate and manage share keys for consumers</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger><Button><Plus className="h-4 w-4 mr-2" />Generate Key</Button></DialogTrigger>
-          <DialogContent className="sm:max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Generate New API Key</DialogTitle>
-              <DialogDescription>Create a share key that consumers will use to access the AI provider through your gateway.</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Key Name</Label>
-                <Input id="name" placeholder="e.g. Team Alpha" value={formName} onChange={(e) => setFormName(e.target.value)} />
-              </div>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="limitWindow">Window Limit</Label>
-                  <Input id="limitWindow" type="number" placeholder="0 = unlimited" value={formLimitWindow} onChange={(e) => setFormLimitWindow(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="windowHrs">Window (hrs)</Label>
-                  <Input id="windowHrs" type="number" min="1" placeholder="5" value={formWindowHrs} onChange={(e) => setFormWindowHrs(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="limitDaily">Daily Limit</Label>
-                  <Input id="limitDaily" type="number" placeholder="0 = unlimited" value={formLimitDaily} onChange={(e) => setFormLimitDaily(e.target.value)} />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="models">Allowed Models</Label>
-                <Input id="models" placeholder="e.g. gpt-4o,gpt-4o-mini (empty = all)" value={formModels} onChange={(e) => setFormModels(e.target.value)} />
-                <p className="text-xs text-muted-foreground">Comma-separated model names. Leave empty to allow all models.</p>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-              <Button onClick={handleCreate} disabled={!formName}>Generate</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <GenerateKeyDialog onSuccess={handleCreateSuccess} />
       </div>
 
       {newKey && (
