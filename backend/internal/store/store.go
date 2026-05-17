@@ -7,7 +7,7 @@ import (
 
 	"github.com/ihsanbudiman/throtl/internal/model"
 
-	_ "github.com/lib/pq"
+	_ "modernc.org/sqlite"
 )
 
 type Store struct {
@@ -15,11 +15,12 @@ type Store struct {
 }
 
 func New(dbURL string) (*Store, error) {
-	db, err := sql.Open("postgres", dbURL)
+	dsn := dbURL + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)"
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
-	db.SetMaxOpenConns(25)
+	db.SetMaxOpenConns(1)
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
@@ -36,7 +37,7 @@ func (s *Store) migrate() error {
 			name TEXT NOT NULL,
 			base_url TEXT NOT NULL,
 			api_key TEXT NOT NULL,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		)`,
 		`CREATE TABLE IF NOT EXISTS api_keys (
 			id TEXT PRIMARY KEY,
@@ -45,14 +46,14 @@ func (s *Store) migrate() error {
 			limit_window INT DEFAULT 0,
 			limit_daily INT DEFAULT 0,
 			limit_window_hrs INT DEFAULT 0,
-			window_start TIMESTAMP,
+			window_start DATETIME,
 			window_count INT DEFAULT 0,
 			daily_count INT DEFAULT 0,
 			daily_date DATE,
 			allowed_models TEXT DEFAULT '',
-			active BOOLEAN DEFAULT TRUE,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			last_used_at TIMESTAMP
+			active INTEGER DEFAULT 1,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			last_used_at DATETIME
 		)`,
 		`CREATE TABLE IF NOT EXISTS usage_logs (
 			id TEXT PRIMARY KEY,
@@ -63,7 +64,7 @@ func (s *Store) migrate() error {
 			tokens_in INT DEFAULT 0,
 			tokens_out INT DEFAULT 0,
 			latency_ms INT DEFAULT 0,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_usage_key ON usage_logs(api_key_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_usage_time ON usage_logs(created_at)`,
@@ -72,39 +73,21 @@ func (s *Store) migrate() error {
 			email TEXT NOT NULL UNIQUE,
 			password TEXT NOT NULL,
 			name TEXT NOT NULL,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		)`,
 		`CREATE TABLE IF NOT EXISTS model_overrides (
 			id TEXT PRIMARY KEY,
 			provider_id TEXT NOT NULL REFERENCES providers(id),
 			model_name TEXT NOT NULL,
-			active BOOLEAN DEFAULT TRUE,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			active INTEGER DEFAULT 1,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			UNIQUE(provider_id, model_name)
 		)`,
-		// Drop provider_id from api_keys — keys are no longer bound to a single provider.
-		// PostgreSQL doesn't support DROP COLUMN IF EXISTS in a simple way, so catch the error.
 	}
 	for _, m := range migrations {
 		if _, err := s.db.Exec(m); err != nil {
 			return fmt.Errorf("exec migration: %w", err)
 		}
-	}
-
-	// Idempotent DROP COLUMN for provider_id — ignore if column doesn't exist
-	if _, err := s.db.Exec(`ALTER TABLE api_keys DROP COLUMN provider_id`); err != nil {
-	}
-
-	// Idempotent ALTER TABLE for new columns
-	if _, err := s.db.Exec(`ALTER TABLE api_keys ADD COLUMN daily_count INT DEFAULT 0`); err != nil {
-	}
-	if _, err := s.db.Exec(`ALTER TABLE api_keys ADD COLUMN daily_date DATE`); err != nil {
-	}
-
-	// Rename limit_5hr → limit_window, limit_24hr → limit_daily
-	if _, err := s.db.Exec(`ALTER TABLE api_keys RENAME COLUMN limit_5hr TO limit_window`); err != nil {
-	}
-	if _, err := s.db.Exec(`ALTER TABLE api_keys RENAME COLUMN limit_24hr TO limit_daily`); err != nil {
 	}
 
 	return nil
@@ -113,7 +96,7 @@ func (s *Store) migrate() error {
 // --- Providers ---
 
 func (s *Store) CreateProvider(p *model.Provider) error {
-	_, err := s.db.Exec(`INSERT INTO providers (id, name, base_url, api_key, created_at) VALUES ($1, $2, $3, $4, $5)`,
+	_, err := s.db.Exec(`INSERT INTO providers (id, name, base_url, api_key, created_at) VALUES (?, ?, ?, ?, ?)`,
 		p.ID, p.Name, p.BaseURL, p.APIKey, p.CreatedAt)
 	return err
 }
@@ -137,7 +120,7 @@ func (s *Store) ListProviders() ([]model.Provider, error) {
 
 func (s *Store) GetProvider(id string) (*model.Provider, error) {
 	var p model.Provider
-	err := s.db.QueryRow(`SELECT id, name, base_url, api_key, created_at FROM providers WHERE id = $1`, id).
+	err := s.db.QueryRow(`SELECT id, name, base_url, api_key, created_at FROM providers WHERE id = ?`, id).
 		Scan(&p.ID, &p.Name, &p.BaseURL, &p.APIKey, &p.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -146,7 +129,7 @@ func (s *Store) GetProvider(id string) (*model.Provider, error) {
 }
 
 func (s *Store) DeleteProvider(id string) error {
-	_, err := s.db.Exec(`DELETE FROM providers WHERE id = $1`, id)
+	_, err := s.db.Exec(`DELETE FROM providers WHERE id = ?`, id)
 	return err
 }
 
@@ -154,7 +137,7 @@ func (s *Store) DeleteProvider(id string) error {
 
 func (s *Store) CreateAPIKey(k *model.APIKey) error {
 	_, err := s.db.Exec(`INSERT INTO api_keys (id, name, key, limit_window, limit_daily, limit_window_hrs, allowed_models, active, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		k.ID, k.Name, k.Key, k.LimitWindow, k.LimitDaily, k.LimitWindowHrs, k.AllowedModels, k.Active, k.CreatedAt)
 	return err
 }
@@ -185,7 +168,7 @@ func (s *Store) GetAPIKeyByShareKey(key string) (*model.APIKey, error) {
 	var k model.APIKey
 	var lastUsed sql.NullTime
 	err := s.db.QueryRow(`SELECT id, name, key, limit_window, limit_daily, limit_window_hrs, allowed_models, active, created_at, last_used_at
-		FROM api_keys WHERE key = $1`, key).
+		FROM api_keys WHERE key = ?`, key).
 		Scan(&k.ID, &k.Name, &k.Key, &k.LimitWindow, &k.LimitDaily, &k.LimitWindowHrs, &k.AllowedModels, &k.Active, &k.CreatedAt, &lastUsed)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -200,7 +183,7 @@ func (s *Store) GetAPIKeyByID(id string) (*model.APIKey, error) {
 	var k model.APIKey
 	var lastUsed sql.NullTime
 	err := s.db.QueryRow(`SELECT id, name, key, limit_window, limit_daily, limit_window_hrs, allowed_models, active, created_at, last_used_at
-		FROM api_keys WHERE id = $1`, id).
+		FROM api_keys WHERE id = ?`, id).
 		Scan(&k.ID, &k.Name, &k.Key, &k.LimitWindow, &k.LimitDaily, &k.LimitWindowHrs, &k.AllowedModels, &k.Active, &k.CreatedAt, &lastUsed)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -212,21 +195,21 @@ func (s *Store) GetAPIKeyByID(id string) (*model.APIKey, error) {
 }
 
 func (s *Store) ToggleAPIKey(id string, active bool) error {
-	_, err := s.db.Exec(`UPDATE api_keys SET active = $1 WHERE id = $2`, active, id)
+	_, err := s.db.Exec(`UPDATE api_keys SET active = ? WHERE id = ?`, active, id)
 	return err
 }
 
 func (s *Store) DeleteAPIKey(id string) error {
-	_, err := s.db.Exec(`DELETE FROM usage_logs WHERE api_key_id = $1`, id)
+	_, err := s.db.Exec(`DELETE FROM usage_logs WHERE api_key_id = ?`, id)
 	if err != nil {
 		return err
 	}
-	_, err = s.db.Exec(`DELETE FROM api_keys WHERE id = $1`, id)
+	_, err = s.db.Exec(`DELETE FROM api_keys WHERE id = ?`, id)
 	return err
 }
 
 func (s *Store) UpdateLastUsed(id string) error {
-	_, err := s.db.Exec(`UPDATE api_keys SET last_used_at = $1 WHERE id = $2`, time.Now(), id)
+	_, err := s.db.Exec(`UPDATE api_keys SET last_used_at = ? WHERE id = ?`, time.Now(), id)
 	return err
 }
 
@@ -234,14 +217,14 @@ func (s *Store) UpdateLastUsed(id string) error {
 
 func (s *Store) CreateUsageLog(l *model.UsageLog) error {
 	_, err := s.db.Exec(`INSERT INTO usage_logs (id, api_key_id, provider, model, status, tokens_in, tokens_out, latency_ms, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		l.ID, l.APIKeyID, l.Provider, l.Model, l.Status, l.TokensIn, l.TokensOut, l.LatencyMs, l.CreatedAt)
 	return err
 }
 
 func (s *Store) GetRecentLogs(limit int) ([]model.UsageLog, error) {
 	rows, err := s.db.Query(`SELECT id, api_key_id, provider, model, status, tokens_in, tokens_out, latency_ms, created_at
-		FROM usage_logs ORDER BY created_at DESC LIMIT $1`, limit)
+		FROM usage_logs ORDER BY created_at DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +245,7 @@ func (s *Store) GetDashboardStats() (*model.DashboardStats, error) {
 
 	// Total keys
 	s.db.QueryRow(`SELECT COUNT(*) FROM api_keys`).Scan(&stats.TotalKeys)
-	s.db.QueryRow(`SELECT COUNT(*) FROM api_keys WHERE active = TRUE`).Scan(&stats.ActiveKeys)
+	s.db.QueryRow(`SELECT COUNT(*) FROM api_keys WHERE active = 1`).Scan(&stats.ActiveKeys)
 	s.db.QueryRow(`SELECT COUNT(*) FROM providers`).Scan(&stats.TotalProviders)
 	s.db.QueryRow(`SELECT COUNT(*) FROM usage_logs`).Scan(&stats.TotalRequests)
 
@@ -278,7 +261,7 @@ func (s *Store) GetDashboardStats() (*model.DashboardStats, error) {
 
 	// Key usage
 	stats.KeyUsage = make([]model.KeyUsageStat, 0)
-	rows, err := s.db.Query(`SELECT k.name, SUBSTRING(k.key, 1, 12) as key_prefix, COUNT(l.id) as requests,
+	rows, err := s.db.Query(`SELECT k.name, SUBSTR(k.key, 1, 12) as key_prefix, COUNT(l.id) as requests,
 		COALESCE(SUM(l.tokens_in), 0), COALESCE(SUM(l.tokens_out), 0)
 		FROM api_keys k LEFT JOIN usage_logs l ON k.id = l.api_key_id
 		GROUP BY k.id ORDER BY requests DESC LIMIT 5`)
@@ -310,7 +293,7 @@ func (s *Store) GetDashboardStats() (*model.DashboardStats, error) {
 
 func (s *Store) GetRequestCountSince(apiKeyID string, since time.Time) (int, error) {
 	var count int
-	err := s.db.QueryRow(`SELECT COUNT(*) FROM usage_logs WHERE api_key_id = $1 AND created_at >= $2`,
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM usage_logs WHERE api_key_id = ? AND created_at >= ?`,
 		apiKeyID, since).Scan(&count)
 	return count, err
 }
@@ -319,7 +302,7 @@ func (s *Store) GetRequestCountSince(apiKeyID string, since time.Time) (int, err
 
 func (s *Store) GetRateLimitState(keyID string) (windowStart time.Time, count int, err error) {
 	var ws sql.NullTime
-	err = s.db.QueryRow(`SELECT window_start, window_count FROM api_keys WHERE id = $1`, keyID).Scan(&ws, &count)
+	err = s.db.QueryRow(`SELECT window_start, window_count FROM api_keys WHERE id = ?`, keyID).Scan(&ws, &count)
 	if err == sql.ErrNoRows {
 		return time.Time{}, 0, nil
 	}
@@ -330,18 +313,18 @@ func (s *Store) GetRateLimitState(keyID string) (windowStart time.Time, count in
 }
 
 func (s *Store) ResetRateLimitWindow(keyID string, start time.Time) error {
-	_, err := s.db.Exec(`UPDATE api_keys SET window_start = $1, window_count = 0 WHERE id = $2`, start, keyID)
+	_, err := s.db.Exec(`UPDATE api_keys SET window_start = ?, window_count = 0 WHERE id = ?`, start, keyID)
 	return err
 }
 
 func (s *Store) IncrementWindowCount(keyID string) error {
-	_, err := s.db.Exec(`UPDATE api_keys SET window_count = window_count + 1, daily_count = daily_count + 1 WHERE id = $1`, keyID)
+	_, err := s.db.Exec(`UPDATE api_keys SET window_count = window_count + 1, daily_count = daily_count + 1 WHERE id = ?`, keyID)
 	return err
 }
 
 func (s *Store) GetDailyCount(keyID string) (date string, count int, err error) {
 	var ns sql.NullString
-	err = s.db.QueryRow(`SELECT daily_date, daily_count FROM api_keys WHERE id = $1`, keyID).Scan(&ns, &count)
+	err = s.db.QueryRow(`SELECT daily_date, daily_count FROM api_keys WHERE id = ?`, keyID).Scan(&ns, &count)
 	if err == sql.ErrNoRows {
 		return "", 0, nil
 	}
@@ -352,7 +335,7 @@ func (s *Store) GetDailyCount(keyID string) (date string, count int, err error) 
 }
 
 func (s *Store) ResetDailyCount(keyID string, date string) error {
-	_, err := s.db.Exec(`UPDATE api_keys SET daily_date = $1::date, daily_count = 0 WHERE id = $2`, date, keyID)
+	_, err := s.db.Exec(`UPDATE api_keys SET daily_date = ?, daily_count = 0 WHERE id = ?`, date, keyID)
 	return err
 }
 
@@ -365,14 +348,14 @@ func (s *Store) HasAdmin() (bool, error) {
 }
 
 func (s *Store) CreateUser(u *model.User) error {
-	_, err := s.db.Exec(`INSERT INTO users (id, email, password, name, created_at) VALUES ($1, $2, $3, $4, $5)`,
+	_, err := s.db.Exec(`INSERT INTO users (id, email, password, name, created_at) VALUES (?, ?, ?, ?, ?)`,
 		u.ID, u.Email, u.Password, u.Name, u.CreatedAt)
 	return err
 }
 
 func (s *Store) GetUserByEmail(email string) (*model.User, error) {
 	var u model.User
-	err := s.db.QueryRow(`SELECT id, email, password, name, created_at FROM users WHERE email = $1`, email).
+	err := s.db.QueryRow(`SELECT id, email, password, name, created_at FROM users WHERE email = ?`, email).
 		Scan(&u.ID, &u.Email, &u.Password, &u.Name, &u.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -382,7 +365,7 @@ func (s *Store) GetUserByEmail(email string) (*model.User, error) {
 
 func (s *Store) GetUserByID(id string) (*model.User, error) {
 	var u model.User
-	err := s.db.QueryRow(`SELECT id, email, password, name, created_at FROM users WHERE id = $1`, id).
+	err := s.db.QueryRow(`SELECT id, email, password, name, created_at FROM users WHERE id = ?`, id).
 		Scan(&u.ID, &u.Email, &u.Password, &u.Name, &u.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -392,9 +375,9 @@ func (s *Store) GetUserByID(id string) (*model.User, error) {
 
 func (s *Store) UpsertModelOverride(m *model.ModelOverride) error {
 	_, err := s.db.Exec(`INSERT INTO model_overrides (id, provider_id, model_name, active, created_at)
-		VALUES ($1, $2, $3, $4, $5)
-		ON CONFLICT (provider_id, model_name) DO UPDATE SET active = $4`,
-		m.ID, m.ProviderID, m.ModelName, m.Active, m.CreatedAt)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT (provider_id, model_name) DO UPDATE SET active = ?`,
+		m.ID, m.ProviderID, m.ModelName, m.Active, m.CreatedAt, m.Active)
 	return err
 }
 
@@ -418,7 +401,7 @@ func (s *Store) ListModelOverrides() ([]model.ModelOverride, error) {
 func (s *Store) GetModelOverride(providerID, modelName string) (*model.ModelOverride, error) {
 	var m model.ModelOverride
 	err := s.db.QueryRow(`SELECT id, provider_id, model_name, active, created_at FROM model_overrides
-		WHERE provider_id = $1 AND model_name = $2`, providerID, modelName).
+		WHERE provider_id = ? AND model_name = ?`, providerID, modelName).
 		Scan(&m.ID, &m.ProviderID, &m.ModelName, &m.Active, &m.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -427,6 +410,6 @@ func (s *Store) GetModelOverride(providerID, modelName string) (*model.ModelOver
 }
 
 func (s *Store) DeleteModelOverridesByProvider(providerID string) error {
-	_, err := s.db.Exec(`DELETE FROM model_overrides WHERE provider_id = $1`, providerID)
+	_, err := s.db.Exec(`DELETE FROM model_overrides WHERE provider_id = ?`, providerID)
 	return err
 }

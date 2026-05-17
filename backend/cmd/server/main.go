@@ -18,7 +18,7 @@ import (
 func main() {
 	dbURL := os.Getenv("THROTL_DB_URL")
 	if dbURL == "" {
-		dbURL = "postgres://throtl:throtl@localhost:5432/throtl?sslmode=disable"
+		dbURL = "throtl.db"
 	}
 	port := os.Getenv("THROTL_PORT")
 	if port == "" {

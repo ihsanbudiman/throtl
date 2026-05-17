@@ -121,7 +121,6 @@ curl https://your-throtl/v1/models \
 |---------|------|
 | Dashboard | http://localhost:3000 |
 | Gateway API | http://localhost:8081 |
-| PostgreSQL | localhost:5432 |
 
 ---
 
@@ -132,7 +131,7 @@ Set these environment variables in `docker-compose.yml`:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `THROTL_PORT` | `8080` | Gateway server port (inside container) |
-| `THROTL_DB_URL` | `postgres://throtl:throtl@db:5432/throtl` | PostgreSQL connection string |
+| `THROTL_DB_URL` | `file:/data/throtl.db` | SQLite database file path |
 | `THROTL_JWT_SECRET` | auto-generated | JWT signing key. **Set this to a secure random string** — otherwise sessions invalidate on every restart |
 
 ---
@@ -143,7 +142,7 @@ Set these environment variables in `docker-compose.yml`:
 docker compose down
 ```
 
-Data persists in the `pgdata` Docker volume. To wipe everything:
+Data persists in the `dbdata` Docker volume. To wipe everything:
 
 ```bash
 docker compose down -v
@@ -157,7 +156,7 @@ docker compose down -v
 |-------|------|
 | Backend | Go + Echo |
 | Frontend | React + Vite + Tailwind CSS |
-| Database | PostgreSQL 17 |
+| Database | SQLite (WAL mode) |
 | Auth | JWT + bcrypt |
 
 ---
