@@ -74,9 +74,9 @@ export default function ModelsPage() {
   if (loading) {
     return (
       <div className="space-y-6 fade-in-up">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-2"><div className="h-8 w-36 shimmer rounded-lg" /><div className="h-4 w-64 shimmer rounded-lg" /></div>
-          <div className="h-9 w-32 shimmer rounded-lg" />
+          <div className="h-9 w-32 shimmer rounded-lg shrink-0" />
         </div>
         <Card><CardContent className="p-6"><div className="space-y-3">{[1, 2, 3, 4, 5].map((i) => <div key={i} className="h-10 w-full shimmer rounded-lg" />)}</div></CardContent></Card>
       </div>
@@ -85,7 +85,7 @@ export default function ModelsPage() {
 
   return (
     <div className="space-y-6 fade-in-up">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-[400] tracking-tight">Models</h2>
           <p className="text-muted-foreground text-sm mt-1">
@@ -95,10 +95,10 @@ export default function ModelsPage() {
             )}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="relative">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative flex-1 sm:flex-none min-w-0">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input placeholder="Search models..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 w-44 sm:w-56 pl-8" />
+            <Input placeholder="Search models..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 w-full sm:w-56 pl-8" />
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger className="group inline-flex h-7 shrink-0 cursor-default items-center justify-center gap-1 rounded-full border border-hairline bg-transparent px-3 text-xs font-[400] text-ink whitespace-nowrap outline-none select-none transition-all duration-150 hover:bg-canvas-soft hover:text-ink focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30">
