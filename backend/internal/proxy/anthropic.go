@@ -17,6 +17,63 @@ import (
 
 const anthropicVersion = "2023-06-01"
 
+// estimateInputTokens extracts all text content from an Anthropic-format request
+// and estimates the input token count. Anthropic's streaming API reports
+// input_tokens:0 in the message_start event, so we estimate from the request body.
+// Uses ~4 chars per token (conservative for English/mixed content).
+func estimateInputTokens(body []byte) int {
+	var req map[string]interface{}
+	if err := json.Unmarshal(body, &req); err != nil {
+		return 0
+	}
+
+	var totalChars int
+
+	if system, ok := req["system"].(string); ok {
+		totalChars += len(system)
+	}
+
+	if messages, ok := req["messages"].([]interface{}); ok {
+		for _, msgRaw := range messages {
+			msg, ok := msgRaw.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			content, _ := msg["content"]
+			switch c := content.(type) {
+			case string:
+				totalChars += len(c)
+			case []interface{}:
+				// content blocks: [{"type":"text","text":"..."}]
+				for _, blockRaw := range c {
+					block, ok := blockRaw.(map[string]interface{})
+					if !ok {
+						continue
+					}
+					if text, ok := block["text"].(string); ok {
+						totalChars += len(text)
+					}
+				}
+			}
+		}
+	}
+
+	if tools, ok := req["tools"].([]interface{}); ok {
+		toolBytes, _ := json.Marshal(tools)
+		totalChars += len(toolBytes)
+	}
+
+	if totalChars == 0 {
+		return 0
+	}
+
+	tokens := totalChars / 4
+	if tokens < 1 {
+		tokens = 1
+	}
+	return tokens
+}
+
 type AnthropicAdapter struct {
 	store       *store.Store
 	upstream    *http.Client
@@ -46,6 +103,8 @@ func (a *AnthropicAdapter) ProxyChat(c echo.Context, provider *model.Provider, b
 // Anthropic response without any format conversion. Used when the client
 // sent an Anthropic-format request and expects Anthropic-format back.
 func (a *AnthropicAdapter) proxyChatPassthrough(c echo.Context, provider *model.Provider, body []byte, reqModel string, keyID string, start time.Time) error {
+	estimatedInputTokens := estimateInputTokens(body)
+
 	anthropicBody := OpenAIToAnthropicRequest(body)
 
 	upstreamURL := strings.TrimRight(provider.BaseURL, "/") + "/v1/messages"
@@ -100,6 +159,10 @@ func (a *AnthropicAdapter) proxyChatPassthrough(c echo.Context, provider *model.
 		}
 
 		inputTokens, outputTokens := extractAnthropicStreamTokensPassthrough(streamBuf.String())
+		if inputTokens == 0 {
+			inputTokens = estimatedInputTokens
+		}
+		log.Printf("Anthropic passthrough stream tokens: in=%d out=%d bufLen=%d", inputTokens, outputTokens, streamBuf.Len())
 
 		go func() {
 			latency := int(time.Since(start).Milliseconds())
@@ -159,6 +222,7 @@ func (a *AnthropicAdapter) proxyChatPassthrough(c echo.Context, provider *model.
 // proxyChatWithTransform sends the request to Anthropic and converts the
 // response to OpenAI format. Used when the client sent an OpenAI-format request.
 func (a *AnthropicAdapter) proxyChatWithTransform(c echo.Context, provider *model.Provider, body []byte, actualModel string, reqModel string, keyID string, start time.Time) error {
+	estimatedInputTokens := estimateInputTokens(body)
 
 	anthropicBody := OpenAIToAnthropicRequest(body)
 
@@ -201,6 +265,9 @@ func (a *AnthropicAdapter) proxyChatWithTransform(c echo.Context, provider *mode
 		inputTokens, outputTokens := streamAnthropicToOpenAI(
 			upstreamResp.Body, c, respID, actualModel, canFlush, flusher,
 		)
+		if inputTokens == 0 {
+			inputTokens = estimatedInputTokens
+		}
 
 		go func() {
 			latency := int(time.Since(start).Milliseconds())
@@ -324,7 +391,8 @@ func streamAnthropicToOpenAI(
 	}
 
 	if sseBuf.Len() > 0 {
-		eventType, dataJSON := parseSSEEvent(sseBuf.String())
+		remaining := strings.ReplaceAll(sseBuf.String(), "\r\n", "\n")
+		eventType, dataJSON := parseSSEEvent(remaining)
 		if dataJSON != "" {
 			var data map[string]interface{}
 			if json.Unmarshal([]byte(dataJSON), &data) == nil {
@@ -449,6 +517,9 @@ func processAnthropicStreamEvent(
 			if ot, ok := usage["output_tokens"].(float64); ok {
 				*outputTokens = int(ot)
 			}
+			if it, ok := usage["input_tokens"].(float64); ok && *inputTokens == 0 {
+				*inputTokens = int(it)
+			}
 			writeAndFlush(buildOpenAIStreamUsageChunk(id, model, *inputTokens, *outputTokens))
 		}
 
@@ -466,7 +537,8 @@ func processAnthropicStreamEvent(
 // to extract token counts for usage logging (passthrough mode).
 func extractAnthropicStreamTokensPassthrough(streamData string) (int, int) {
 	var inputTokens, outputTokens int
-	lines := strings.Split(streamData, "\n")
+	normalized := strings.ReplaceAll(streamData, "\r\n", "\n")
+	lines := strings.Split(normalized, "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if !strings.HasPrefix(line, "data:") {
@@ -494,6 +566,9 @@ func extractAnthropicStreamTokensPassthrough(streamData string) (int, int) {
 			if usage, ok := data["usage"].(map[string]interface{}); ok {
 				if ot, ok := usage["output_tokens"].(float64); ok {
 					outputTokens = int(ot)
+				}
+				if it, ok := usage["input_tokens"].(float64); ok && inputTokens == 0 {
+					inputTokens = int(it)
 				}
 			}
 		}

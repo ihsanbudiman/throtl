@@ -374,6 +374,9 @@ func AnthropicStreamToOpenAI(streamData string, id string, model string) (string
 				if ot, ok := usage["output_tokens"].(float64); ok {
 					outputTokens = int(ot)
 				}
+				if it, ok := usage["input_tokens"].(float64); ok && inputTokens == 0 {
+					inputTokens = int(it)
+				}
 				openaiChunks = append(openaiChunks, buildOpenAIStreamUsageChunk(id, model, inputTokens, outputTokens))
 			}
 
