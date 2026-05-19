@@ -42,16 +42,18 @@ type Provider struct {
 
 // APIKey is a generated share key for consumers
 type APIKey struct {
-	ID               string    `json:"id"`
-	Name             string    `json:"name"`
-	Key              string    `json:"key"`
-	LimitWindow      int       `json:"limit_window"`
-	LimitDaily       int       `json:"limit_daily"`
-	LimitWindowHrs   int       `json:"limit_window_hrs"`
-	AllowedModels    string    `json:"allowed_models"`
-	Active           bool      `json:"active"`
-	CreatedAt        time.Time `json:"created_at"`
-	LastUsedAt       *time.Time `json:"last_used_at,omitempty"`
+	ID                  string     `json:"id"`
+	Name                string     `json:"name"`
+	Key                 string     `json:"key"`
+	LimitDaily          int        `json:"limit_daily"`
+	LimitTokensInDaily  int        `json:"limit_tokens_in_daily"`
+	LimitTokensOutDaily int        `json:"limit_tokens_out_daily"`
+	TokensInDailyCount  int        `json:"tokens_in_daily_count"`
+	TokensOutDailyCount int        `json:"tokens_out_daily_count"`
+	AllowedModels       string     `json:"allowed_models"`
+	Active              bool       `json:"active"`
+	CreatedAt           time.Time  `json:"created_at"`
+	LastUsedAt          *time.Time `json:"last_used_at,omitempty"`
 }
 
 // UsageLog tracks a single proxied request
@@ -69,11 +71,11 @@ type UsageLog struct {
 
 // CreateAPIKeyRequest is the input for generating a new key
 type CreateAPIKeyRequest struct {
-	Name           string `json:"name" validate:"required"`
-	LimitWindow      int    `json:"limit_window"`
-	LimitDaily       int    `json:"limit_daily"`
-	LimitWindowHrs int    `json:"limit_window_hrs"`
-	AllowedModels  string `json:"allowed_models"`
+	Name               string `json:"name" validate:"required"`
+	LimitDaily         int    `json:"limit_daily"`
+	LimitTokensInDaily  int    `json:"limit_tokens_in_daily"`
+	LimitTokensOutDaily int    `json:"limit_tokens_out_daily"`
+	AllowedModels      string `json:"allowed_models"`
 }
 
 // CreateProviderRequest is the input for adding a provider

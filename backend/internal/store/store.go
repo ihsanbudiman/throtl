@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -99,6 +100,12 @@ func (s *Store) migrate() error {
 	// Backward-compatible: add request_multiplier column
 	s.db.Exec(`ALTER TABLE model_overrides ADD COLUMN request_multiplier INTEGER DEFAULT 1`)
 
+	// Backward-compatible: add token limit columns
+	s.db.Exec(`ALTER TABLE api_keys ADD COLUMN limit_tokens_in_daily INT DEFAULT 0`)
+	s.db.Exec(`ALTER TABLE api_keys ADD COLUMN limit_tokens_out_daily INT DEFAULT 0`)
+	s.db.Exec(`ALTER TABLE api_keys ADD COLUMN tokens_in_daily_count INT DEFAULT 0`)
+	s.db.Exec(`ALTER TABLE api_keys ADD COLUMN tokens_out_daily_count INT DEFAULT 0`)
+
 	return nil
 }
 
@@ -148,14 +155,14 @@ func (s *Store) DeleteProvider(id string) error {
 // --- API Keys ---
 
 func (s *Store) CreateAPIKey(k *model.APIKey) error {
-	_, err := s.db.Exec(`INSERT INTO api_keys (id, name, key, limit_window, limit_daily, limit_window_hrs, allowed_models, active, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		k.ID, k.Name, k.Key, k.LimitWindow, k.LimitDaily, k.LimitWindowHrs, k.AllowedModels, k.Active, k.CreatedAt)
+	_, err := s.db.Exec(`INSERT INTO api_keys (id, name, key, limit_daily, limit_tokens_in_daily, limit_tokens_out_daily, tokens_in_daily_count, tokens_out_daily_count, allowed_models, active, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		k.ID, k.Name, k.Key, k.LimitDaily, k.LimitTokensInDaily, k.LimitTokensOutDaily, k.TokensInDailyCount, k.TokensOutDailyCount, k.AllowedModels, k.Active, k.CreatedAt)
 	return err
 }
 
 func (s *Store) ListAPIKeys() ([]model.APIKey, error) {
-	rows, err := s.db.Query(`SELECT id, name, key, limit_window, limit_daily, limit_window_hrs, allowed_models, active, created_at, last_used_at
+	rows, err := s.db.Query(`SELECT id, name, key, limit_daily, limit_tokens_in_daily, limit_tokens_out_daily, tokens_in_daily_count, tokens_out_daily_count, allowed_models, active, created_at, last_used_at
 		FROM api_keys ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
@@ -165,7 +172,7 @@ func (s *Store) ListAPIKeys() ([]model.APIKey, error) {
 	for rows.Next() {
 		var k model.APIKey
 		var lastUsed sql.NullTime
-		if err := rows.Scan(&k.ID, &k.Name, &k.Key, &k.LimitWindow, &k.LimitDaily, &k.LimitWindowHrs, &k.AllowedModels, &k.Active, &k.CreatedAt, &lastUsed); err != nil {
+		if err := rows.Scan(&k.ID, &k.Name, &k.Key, &k.LimitDaily, &k.LimitTokensInDaily, &k.LimitTokensOutDaily, &k.TokensInDailyCount, &k.TokensOutDailyCount, &k.AllowedModels, &k.Active, &k.CreatedAt, &lastUsed); err != nil {
 			return nil, err
 		}
 		if lastUsed.Valid {
@@ -182,9 +189,9 @@ func (s *Store) ListAPIKeys() ([]model.APIKey, error) {
 func (s *Store) GetAPIKeyByShareKey(key string) (*model.APIKey, error) {
 	var k model.APIKey
 	var lastUsed sql.NullTime
-	err := s.db.QueryRow(`SELECT id, name, key, limit_window, limit_daily, limit_window_hrs, allowed_models, active, created_at, last_used_at
+	err := s.db.QueryRow(`SELECT id, name, key, limit_daily, limit_tokens_in_daily, limit_tokens_out_daily, tokens_in_daily_count, tokens_out_daily_count, allowed_models, active, created_at, last_used_at
 		FROM api_keys WHERE key = ?`, key).
-		Scan(&k.ID, &k.Name, &k.Key, &k.LimitWindow, &k.LimitDaily, &k.LimitWindowHrs, &k.AllowedModels, &k.Active, &k.CreatedAt, &lastUsed)
+		Scan(&k.ID, &k.Name, &k.Key, &k.LimitDaily, &k.LimitTokensInDaily, &k.LimitTokensOutDaily, &k.TokensInDailyCount, &k.TokensOutDailyCount, &k.AllowedModels, &k.Active, &k.CreatedAt, &lastUsed)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -197,9 +204,9 @@ func (s *Store) GetAPIKeyByShareKey(key string) (*model.APIKey, error) {
 func (s *Store) GetAPIKeyByID(id string) (*model.APIKey, error) {
 	var k model.APIKey
 	var lastUsed sql.NullTime
-	err := s.db.QueryRow(`SELECT id, name, key, limit_window, limit_daily, limit_window_hrs, allowed_models, active, created_at, last_used_at
+	err := s.db.QueryRow(`SELECT id, name, key, limit_daily, limit_tokens_in_daily, limit_tokens_out_daily, tokens_in_daily_count, tokens_out_daily_count, allowed_models, active, created_at, last_used_at
 		FROM api_keys WHERE id = ?`, id).
-		Scan(&k.ID, &k.Name, &k.Key, &k.LimitWindow, &k.LimitDaily, &k.LimitWindowHrs, &k.AllowedModels, &k.Active, &k.CreatedAt, &lastUsed)
+		Scan(&k.ID, &k.Name, &k.Key, &k.LimitDaily, &k.LimitTokensInDaily, &k.LimitTokensOutDaily, &k.TokensInDailyCount, &k.TokensOutDailyCount, &k.AllowedModels, &k.Active, &k.CreatedAt, &lastUsed)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -348,33 +355,26 @@ func (s *Store) GetRequestCountSince(apiKeyID string, since time.Time) (int, err
 
 // --- Rate Limit State (persisted in DB) ---
 
-func (s *Store) GetRateLimitState(keyID string) (windowStart time.Time, count int, err error) {
-	var ws sql.NullTime
-	err = s.db.QueryRow(`SELECT window_start, window_count FROM api_keys WHERE id = ?`, keyID).Scan(&ws, &count)
-	if err == sql.ErrNoRows {
-		return time.Time{}, 0, nil
-	}
-	if ws.Valid {
-		windowStart = ws.Time
-	}
-	return
-}
-
-func (s *Store) ResetRateLimitWindow(keyID string, start time.Time) error {
-	_, err := s.db.Exec(`UPDATE api_keys SET window_start = ?, window_count = 0 WHERE id = ?`, start, keyID)
+func (s *Store) IncrementDailyCount(keyID string) error {
+	_, err := s.db.Exec(`UPDATE api_keys SET daily_count = daily_count + 1 WHERE id = ?`, keyID)
 	return err
 }
 
-func (s *Store) IncrementWindowCount(keyID string) error {
-	_, err := s.db.Exec(`UPDATE api_keys SET window_count = window_count + 1, daily_count = daily_count + 1 WHERE id = ?`, keyID)
-	return err
-}
-
-func (s *Store) IncrementWindowCountBy(keyID string, delta int) error {
+func (s *Store) IncrementDailyCountBy(keyID string, delta int) error {
 	if delta <= 0 {
 		return nil
 	}
-	_, err := s.db.Exec(`UPDATE api_keys SET window_count = window_count + ?, daily_count = daily_count + ? WHERE id = ?`, delta, delta, keyID)
+	_, err := s.db.Exec(`UPDATE api_keys SET daily_count = daily_count + ? WHERE id = ?`, delta, keyID)
+	return err
+}
+
+func (s *Store) IncrementTokenCount(keyID string, tokensIn int, tokensOut int) error {
+	if tokensIn == 0 && tokensOut == 0 {
+		return nil
+	}
+	_, err := s.db.ExecContext(context.Background(),
+		`UPDATE api_keys SET tokens_in_daily_count = tokens_in_daily_count + ?, tokens_out_daily_count = tokens_out_daily_count + ? WHERE id = ?`,
+		tokensIn, tokensOut, keyID)
 	return err
 }
 

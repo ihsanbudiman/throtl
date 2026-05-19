@@ -130,7 +130,7 @@ func (g *Gateway) ProxyHandler(c echo.Context) error {
 
 	// Apply request multiplier correction after successful proxy
 	if mult, ok := c.Get("throtl_request_multiplier").(int); ok && mult > 1 {
-		if err := g.store.IncrementWindowCountBy(keyID, mult-1); err != nil {
+		if err := g.store.IncrementDailyCountBy(keyID, mult-1); err != nil {
 			log.Printf("Failed to apply request multiplier: %v", err)
 		}
 	}

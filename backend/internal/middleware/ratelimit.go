@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"fmt"
 	"net/http"
 	"time"
 
@@ -17,31 +16,8 @@ func NewRateLimiter(s *store.Store) *RateLimiter {
 	return &RateLimiter{store: s}
 }
 
-func (rl *RateLimiter) Check(keyID string, limitCount, limitWindowHrs, dailyLimit int) (bool, int, string) {
+func (rl *RateLimiter) Check(keyID string, dailyLimit int) (bool, int, string) {
 	now := time.Now()
-
-	// --- Rolling window check ---
-	if limitCount > 0 && limitWindowHrs > 0 {
-		windowStart, windowCount, err := rl.store.GetRateLimitState(keyID)
-		if err != nil {
-			return true, 0, ""
-		}
-
-		windowDuration := time.Duration(limitWindowHrs) * time.Hour
-		if windowStart.IsZero() || now.Sub(windowStart) > windowDuration {
-			rl.store.ResetRateLimitWindow(keyID, now)
-			windowCount = 0
-			windowStart = now
-		}
-
-		if windowCount >= limitCount {
-			retryAfter := int(windowDuration.Seconds()) - int(now.Sub(windowStart).Seconds())
-			if retryAfter < 0 {
-				retryAfter = 0
-			}
-			return false, retryAfter, fmt.Sprintf("%d-hour rate limit exceeded", limitWindowHrs)
-		}
-	}
 
 	// --- Daily limit check (resets at 00:00) ---
 	if dailyLimit > 0 {
@@ -66,15 +42,11 @@ func (rl *RateLimiter) Check(keyID string, limitCount, limitWindowHrs, dailyLimi
 		}
 	}
 
-	rl.store.IncrementWindowCount(keyID)
+	rl.store.IncrementDailyCount(keyID)
 	return true, 0, ""
 }
 
 type KeyRateLimitStatus struct {
-	Count      int        `json:"count"`
-	Limit      int        `json:"limit"`
-	WindowHrs  int        `json:"window_hrs"`
-	ResetAt    *time.Time `json:"reset_at,omitempty"`
 	DailyCount int        `json:"daily_count"`
 	DailyLimit int        `json:"daily_limit"`
 	DailyReset *time.Time `json:"daily_reset,omitempty"`
@@ -88,26 +60,6 @@ func (rl *RateLimiter) GetStatus(keyID string) KeyRateLimitStatus {
 
 	status := KeyRateLimitStatus{
 		DailyLimit: key.LimitDaily,
-		Limit:      key.LimitWindow,
-	}
-
-	windowHrs := key.LimitWindowHrs
-	if windowHrs == 0 && key.LimitWindow > 0 {
-		windowHrs = 5
-	}
-
-	windowStart, count, err := rl.store.GetRateLimitState(keyID)
-	if err == nil && !windowStart.IsZero() {
-		resetTime := windowStart.Add(time.Duration(windowHrs) * time.Hour)
-		if time.Now().After(resetTime) {
-			count = 0
-		}
-
-		status.Count = count
-		status.WindowHrs = windowHrs
-		status.ResetAt = &resetTime
-	} else if key.LimitWindow > 0 {
-		status.WindowHrs = windowHrs
 	}
 
 	now := time.Now()
@@ -135,11 +87,9 @@ func (rl *RateLimiter) Middleware() echo.MiddlewareFunc {
 					"error": map[string]string{"message": "Missing API key context", "type": "authentication_error"},
 				})
 			}
-			limitCount, _ := c.Get("throtl_limit_window").(int)
-			limitWindowHrs, _ := c.Get("throtl_limit_window_hrs").(int)
 			dailyLimit, _ := c.Get("throtl_limit_daily").(int)
 
-			allowed, retryAfter, reason := rl.Check(keyID, limitCount, limitWindowHrs, dailyLimit)
+			allowed, retryAfter, reason := rl.Check(keyID, dailyLimit)
 			if !allowed {
 				c.Response().Header().Set("Retry-After", time.Now().Add(time.Duration(retryAfter)*time.Second).Format(time.RFC1123))
 				return c.JSON(http.StatusTooManyRequests, map[string]interface{}{
@@ -197,9 +147,7 @@ func KeyAuth(s *store.Store) echo.MiddlewareFunc {
 			}
 
 			c.Set("throtl_key_id", key.ID)
-			c.Set("throtl_limit_window", key.LimitWindow)
 			c.Set("throtl_limit_daily", key.LimitDaily)
-			c.Set("throtl_limit_window_hrs", key.LimitWindowHrs)
 			c.Set("throtl_allowed_models", key.AllowedModels)
 			c.Set("throtl_key_obj", key)
 
