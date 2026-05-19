@@ -112,6 +112,7 @@ export default function KeysPage() {
                        <TableHead>Name</TableHead>
                        <TableHead>Key</TableHead>
                        <TableHead>Token Limits</TableHead>
+                       <TableHead>Daily Requests</TableHead>
                        <TableHead>Models</TableHead>
                        <TableHead>Status</TableHead>
                        <TableHead>Last Used</TableHead>
@@ -128,19 +129,24 @@ export default function KeysPage() {
                             <div className="space-y-1">
                               {key.limit_tokens_in_daily > 0 && (
                                 <div>
-                                  {key.rate_limit?.daily_tokens_reset ? (
-                                    <><span className="font-mono text-xs">In: {key.rate_limit.daily_tokens_in_count}/{key.rate_limit.daily_tokens_in_limit}</span><div className="text-xs text-muted-foreground font-mono">resets {formatDailyReset(key.rate_limit.daily_tokens_reset)}</div></>
+                                  {key.rate_limit?.daily_reset ? (
+                                    <><span className="font-mono text-xs">In: {key.rate_limit.daily_tokens_in_count}/{key.rate_limit.daily_tokens_in_limit}</span><div className="text-xs text-muted-foreground font-mono">resets {formatDailyReset(key.rate_limit.daily_reset)}</div></>
                                   ) : <span className="text-xs text-muted-foreground shimmer inline-block px-2 py-0.5 rounded">In: No requests yet</span>}
                                 </div>
                               )}
                               {key.limit_tokens_out_daily > 0 && (
                                 <div>
-                                  {key.rate_limit?.daily_tokens_reset ? (
-                                    <><span className="font-mono text-xs">Out: {key.rate_limit.daily_tokens_out_count}/{key.rate_limit.daily_tokens_out_limit}</span><div className="text-xs text-muted-foreground font-mono">resets {formatDailyReset(key.rate_limit.daily_tokens_reset)}</div></>
+                                  {key.rate_limit?.daily_reset ? (
+                                    <><span className="font-mono text-xs">Out: {key.rate_limit.daily_tokens_out_count}/{key.rate_limit.daily_tokens_out_limit}</span><div className="text-xs text-muted-foreground font-mono">resets {formatDailyReset(key.rate_limit.daily_reset)}</div></>
                                   ) : <span className="text-xs text-muted-foreground shimmer inline-block px-2 py-0.5 rounded">Out: No requests yet</span>}
                                 </div>
                               )}
                             </div>
+                          ) : <InfinityIcon className="h-3.5 w-3.5 text-muted-foreground" />}
+                        </TableCell>
+                        <TableCell>
+                          {key.limit_daily > 0 ? (
+                            <span className="font-mono text-xs">{key.rate_limit?.daily_count ?? 0}/{key.rate_limit?.daily_limit ?? key.limit_daily}</span>
                           ) : <InfinityIcon className="h-3.5 w-3.5 text-muted-foreground" />}
                         </TableCell>
                         <TableCell>{key.allowed_models ? <Badge variant="secondary" className="text-xs">{key.allowed_models.split(",").length} models</Badge> : <span className="text-muted-foreground">All</span>}</TableCell>
@@ -168,6 +174,9 @@ export default function KeysPage() {
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span>In: {key.limit_tokens_in_daily > 0 ? `${key.rate_limit?.daily_tokens_in_count ?? 0}/${key.rate_limit?.daily_tokens_in_limit ?? key.limit_tokens_in_daily}` : "∞"}</span>
                       <span>Out: {key.limit_tokens_out_daily > 0 ? `${key.rate_limit?.daily_tokens_out_count ?? 0}/${key.rate_limit?.daily_tokens_out_limit ?? key.limit_tokens_out_daily}` : "∞"}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>Requests: {key.limit_daily > 0 ? `${key.rate_limit?.daily_count ?? 0}/${key.rate_limit?.daily_limit ?? key.limit_daily}` : "∞"}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-muted-foreground">{key.last_used_at ? `Last used ${new Date(key.last_used_at).toLocaleDateString()}` : "Never used"}</span>

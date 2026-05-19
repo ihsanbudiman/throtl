@@ -45,11 +45,13 @@ export interface Provider {
 }
 
 export interface RateLimitStatus {
+  daily_count: number;
+  daily_limit: number;
   daily_tokens_in_count: number;
   daily_tokens_in_limit: number;
   daily_tokens_out_count: number;
   daily_tokens_out_limit: number;
-  daily_tokens_reset?: string;
+  daily_reset?: string;
 }
 
 export interface APIKey {
