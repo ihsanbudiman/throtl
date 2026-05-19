@@ -258,6 +258,61 @@ func TestIncrementDailyCount(t *testing.T) {
 	}
 }
 
+func TestDailyResetClearsAllCounters(t *testing.T) {
+	s := MustTestStore()
+	defer s.Close()
+
+	k := InsertTestAPIKey(s, "tok-reset-1", "sk-share-tok-reset-1")
+
+	s.IncrementDailyCountBy(k.ID, 10)
+	s.IncrementTokenCount(k.ID, 5000, 3000)
+
+	yesterday := time.Now().UTC().AddDate(0, 0, -1).Format("2006-01-02")
+	if _, err := s.db.Exec(`UPDATE api_keys SET daily_date = ? WHERE id = ?`, yesterday, k.ID); err != nil {
+		t.Fatalf("set stale daily_date: %v", err)
+	}
+
+	var dailyCount, tokensIn, tokensOut int
+	err := s.db.QueryRow(`SELECT daily_count, tokens_in_daily_count, tokens_out_daily_count FROM api_keys WHERE id = ?`, k.ID).
+		Scan(&dailyCount, &tokensIn, &tokensOut)
+	if err != nil {
+		t.Fatalf("pre-check query: %v", err)
+	}
+	if dailyCount != 10 {
+		t.Fatalf("pre: daily_count = %d, want 10", dailyCount)
+	}
+	if tokensIn != 5000 {
+		t.Fatalf("pre: tokens_in_daily_count = %d, want 5000", tokensIn)
+	}
+	if tokensOut != 3000 {
+		t.Fatalf("pre: tokens_out_daily_count = %d, want 3000", tokensOut)
+	}
+
+	today := time.Now().UTC().Format("2006-01-02")
+	if err := s.ResetDailyCount(k.ID, today); err != nil {
+		t.Fatalf("ResetDailyCount: %v", err)
+	}
+
+	var storedDate string
+	err = s.db.QueryRow(`SELECT daily_count, tokens_in_daily_count, tokens_out_daily_count, daily_date FROM api_keys WHERE id = ?`, k.ID).
+		Scan(&dailyCount, &tokensIn, &tokensOut, &storedDate)
+	if err != nil {
+		t.Fatalf("post-check query: %v", err)
+	}
+	if dailyCount != 0 {
+		t.Errorf("daily_count = %d, want 0 after reset", dailyCount)
+	}
+	if tokensIn != 0 {
+		t.Errorf("tokens_in_daily_count = %d, want 0 after reset", tokensIn)
+	}
+	if tokensOut != 0 {
+		t.Errorf("tokens_out_daily_count = %d, want 0 after reset", tokensOut)
+	}
+	if len(storedDate) < 10 || storedDate[:10] != today {
+		t.Errorf("daily_date = %q, want %q", storedDate, today)
+	}
+}
+
 func TestIncrementDailyCountOnlyAffectsDaily(t *testing.T) {
 	s := MustTestStore()
 	defer s.Close()

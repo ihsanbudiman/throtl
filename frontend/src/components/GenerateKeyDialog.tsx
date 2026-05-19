@@ -51,16 +51,16 @@ const GenerateKeyForm = memo(function GenerateKeyForm({
 }: GenerateKeyFormProps) {
   const { toast } = useToast();
   const [formName, setFormName] = useState("");
-  const [formLimitWindow, setFormLimitWindow] = useState("");
   const [formLimitDaily, setFormLimitDaily] = useState("");
-  const [formWindowHrs, setFormWindowHrs] = useState("5");
+  const [formTokensInDaily, setFormTokensInDaily] = useState("");
+  const [formTokensOutDaily, setFormTokensOutDaily] = useState("");
   const [formModels, setFormModels] = useState("");
 
   const resetForm = () => {
     setFormName("");
-    setFormLimitWindow("");
     setFormLimitDaily("");
-    setFormWindowHrs("5");
+    setFormTokensInDaily("");
+    setFormTokensOutDaily("");
     setFormModels("");
   };
 
@@ -68,9 +68,9 @@ const GenerateKeyForm = memo(function GenerateKeyForm({
     try {
       const key = await api.createKey({
         name: formName,
-        limit_window: formLimitWindow ? parseInt(formLimitWindow) : 0,
         limit_daily: formLimitDaily ? parseInt(formLimitDaily) : 0,
-        limit_window_hrs: formWindowHrs ? parseInt(formWindowHrs) : 5,
+        limit_tokens_in_daily: formTokensInDaily ? parseInt(formTokensInDaily) : 0,
+        limit_tokens_out_daily: formTokensOutDaily ? parseInt(formTokensOutDaily) : 0,
         allowed_models: formModels,
       });
       resetForm();
@@ -87,8 +87,9 @@ const GenerateKeyForm = memo(function GenerateKeyForm({
     onClose();
   };
 
-  const windowLimit = formLimitWindow ? parseInt(formLimitWindow) : 0;
   const dailyLimit = formLimitDaily ? parseInt(formLimitDaily) : 0;
+  const tokensInDaily = formTokensInDaily ? parseInt(formTokensInDaily) : 0;
+  const tokensOutDaily = formTokensOutDaily ? parseInt(formTokensOutDaily) : 0;
 
   return (
     <>
@@ -131,51 +132,7 @@ const GenerateKeyForm = memo(function GenerateKeyForm({
           <div className="rounded-[8px] border border-border/50 bg-muted/30 p-4 space-y-4">
             <div>
               <div className="flex items-center justify-between mb-2">
-                <Label className="text-sm font-medium">Rolling Window Limit</Label>
-                {windowLimit > 0 && (
-                  <Badge variant="outline" className="text-xs">Active</Badge>
-                )}
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="col-span-2 space-y-1.5">
-                  <Label htmlFor="limitWindow" className="text-xs text-muted-foreground font-normal">
-                    Max requests
-                  </Label>
-                  <Input
-                    id="limitWindow"
-                    type="number"
-                    min="0"
-                    placeholder="0"
-                    value={formLimitWindow}
-                    autoComplete="off"
-                    onChange={(e) => setFormLimitWindow(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="windowHrs" className="text-xs text-muted-foreground font-normal">
-                    Per (hours)
-                  </Label>
-                  <Input
-                    id="windowHrs"
-                    type="number"
-                    min="1"
-                    placeholder="5"
-                    value={formWindowHrs}
-                    autoComplete="off"
-                    onChange={(e) => setFormWindowHrs(e.target.value)}
-                  />
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground mt-1.5">
-                {windowLimit > 0
-                  ? `Limits to ${windowLimit} requests per ${formWindowHrs || "5"} hours (sliding window).`
-                  : "No window limit — requests are not throttled by time window."}
-              </p>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <Label htmlFor="limitDaily" className="text-sm font-medium">Daily Limit</Label>
+                <Label htmlFor="limitDaily" className="text-sm font-medium">Daily Request Limit</Label>
                 {dailyLimit > 0 && (
                   <Badge variant="outline" className="text-xs">Active</Badge>
                 )}
@@ -193,6 +150,52 @@ const GenerateKeyForm = memo(function GenerateKeyForm({
                 {dailyLimit > 0
                   ? `Caps at ${dailyLimit} requests per day. Resets at midnight UTC.`
                   : "No daily cap — requests are not limited per day."}
+              </p>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <Label htmlFor="tokensInDaily" className="text-sm font-medium">Daily Token-In Limit</Label>
+                {tokensInDaily > 0 && (
+                  <Badge variant="outline" className="text-xs">Active</Badge>
+                )}
+              </div>
+              <Input
+                id="tokensInDaily"
+                type="number"
+                min="0"
+                placeholder="0"
+                value={formTokensInDaily}
+                autoComplete="off"
+                onChange={(e) => setFormTokensInDaily(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground mt-1.5">
+                {tokensInDaily > 0
+                  ? `Limits to ${tokensInDaily} input tokens per day. Resets at midnight UTC.`
+                  : "No input token limit."}
+              </p>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <Label htmlFor="tokensOutDaily" className="text-sm font-medium">Daily Token-Out Limit</Label>
+                {tokensOutDaily > 0 && (
+                  <Badge variant="outline" className="text-xs">Active</Badge>
+                )}
+              </div>
+              <Input
+                id="tokensOutDaily"
+                type="number"
+                min="0"
+                placeholder="0"
+                value={formTokensOutDaily}
+                autoComplete="off"
+                onChange={(e) => setFormTokensOutDaily(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground mt-1.5">
+                {tokensOutDaily > 0
+                  ? `Limits to ${tokensOutDaily} output tokens per day. Resets at midnight UTC.`
+                  : "No output token limit."}
               </p>
             </div>
           </div>

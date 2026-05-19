@@ -396,7 +396,7 @@ func (s *Store) GetDailyCount(keyID string) (date string, count int, err error) 
 }
 
 func (s *Store) ResetDailyCount(keyID string, date string) error {
-	_, err := s.db.Exec(`UPDATE api_keys SET daily_date = ?, daily_count = 0 WHERE id = ?`, date, keyID)
+	_, err := s.db.Exec(`UPDATE api_keys SET daily_count = 0, tokens_in_daily_count = 0, tokens_out_daily_count = 0, daily_date = ? WHERE id = ?`, date, keyID)
 	return err
 }
 

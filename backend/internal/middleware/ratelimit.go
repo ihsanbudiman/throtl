@@ -19,9 +19,9 @@ func NewRateLimiter(s *store.Store) *RateLimiter {
 func (rl *RateLimiter) Check(keyID string, dailyLimit int) (bool, int, string) {
 	now := time.Now()
 
-	// --- Daily limit check (resets at 00:00) ---
+	// --- Daily limit check (resets at 00:00 UTC) ---
 	if dailyLimit > 0 {
-		today := now.Format("2006-01-02")
+		today := now.UTC().Format("2006-01-02")
 		dailyDate, dailyCount, err := rl.store.GetDailyCount(keyID)
 		if err != nil {
 			return true, 0, ""
@@ -33,7 +33,7 @@ func (rl *RateLimiter) Check(keyID string, dailyLimit int) (bool, int, string) {
 		}
 
 		if dailyCount >= dailyLimit {
-			tomorrow := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, now.Location())
+			tomorrow := time.Date(now.UTC().Year(), now.UTC().Month(), now.UTC().Day()+1, 0, 0, 0, 0, time.UTC)
 			retryAfter := int(tomorrow.Sub(now).Seconds())
 			if retryAfter < 0 {
 				retryAfter = 0
@@ -47,9 +47,13 @@ func (rl *RateLimiter) Check(keyID string, dailyLimit int) (bool, int, string) {
 }
 
 type KeyRateLimitStatus struct {
-	DailyCount int        `json:"daily_count"`
-	DailyLimit int        `json:"daily_limit"`
-	DailyReset *time.Time `json:"daily_reset,omitempty"`
+	DailyCount          int        `json:"daily_count"`
+	DailyLimit          int        `json:"daily_limit"`
+	DailyTokensInCount  int        `json:"daily_tokens_in_count"`
+	DailyTokensInLimit  int        `json:"daily_tokens_in_limit"`
+	DailyTokensOutCount int        `json:"daily_tokens_out_count"`
+	DailyTokensOutLimit int        `json:"daily_tokens_out_limit"`
+	DailyReset          *time.Time `json:"daily_reset,omitempty"`
 }
 
 func (rl *RateLimiter) GetStatus(keyID string) KeyRateLimitStatus {
@@ -59,19 +63,23 @@ func (rl *RateLimiter) GetStatus(keyID string) KeyRateLimitStatus {
 	}
 
 	status := KeyRateLimitStatus{
-		DailyLimit: key.LimitDaily,
+		DailyLimit:          key.LimitDaily,
+		DailyTokensInLimit:  key.LimitTokensInDaily,
+		DailyTokensOutLimit: key.LimitTokensOutDaily,
 	}
 
 	now := time.Now()
-	today := now.Format("2006-01-02")
+	today := now.UTC().Format("2006-01-02")
 	dailyDate, dailyCount, err := rl.store.GetDailyCount(keyID)
 	if err == nil {
 		if dailyDate != today {
 			dailyCount = 0
 		}
 		status.DailyCount = dailyCount
+		status.DailyTokensInCount = key.TokensInDailyCount
+		status.DailyTokensOutCount = key.TokensOutDailyCount
 
-		tomorrow := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, now.Location())
+		tomorrow := time.Date(now.UTC().Year(), now.UTC().Month(), now.UTC().Day()+1, 0, 0, 0, 0, time.UTC)
 		status.DailyReset = &tomorrow
 	}
 
@@ -96,13 +104,61 @@ func (rl *RateLimiter) Middleware() echo.MiddlewareFunc {
 					"error": map[string]interface{}{
 						"message":              reason,
 						"type":                  "rate_limit_error",
-						"retry_after_seconds":  retryAfter,
+						"limit_type":            "daily_requests",
+						"limit":                 dailyLimit,
+						"usage":                 dailyLimit,
+						"retry_after_seconds":   retryAfter,
 					},
 				})
 			}
+
+			limitTokensIn, _ := c.Get("throtl_limit_tokens_in_daily").(int)
+			tokensInCount, _ := c.Get("throtl_tokens_in_daily_count").(int)
+			if limitTokensIn > 0 && tokensInCount >= limitTokensIn {
+				retryAfter := secondsUntilMidnightUTC()
+				c.Response().Header().Set("Retry-After", time.Now().Add(time.Duration(retryAfter)*time.Second).Format(time.RFC1123))
+				return c.JSON(http.StatusTooManyRequests, map[string]interface{}{
+					"error": map[string]interface{}{
+						"message":              "Daily token input limit exceeded",
+						"type":                  "rate_limit_error",
+						"limit_type":            "daily_tokens_in",
+						"limit":                 limitTokensIn,
+						"usage":                 tokensInCount,
+						"retry_after_seconds":   retryAfter,
+					},
+				})
+			}
+
+			limitTokensOut, _ := c.Get("throtl_limit_tokens_out_daily").(int)
+			tokensOutCount, _ := c.Get("throtl_tokens_out_daily_count").(int)
+			if limitTokensOut > 0 && tokensOutCount >= limitTokensOut {
+				retryAfter := secondsUntilMidnightUTC()
+				c.Response().Header().Set("Retry-After", time.Now().Add(time.Duration(retryAfter)*time.Second).Format(time.RFC1123))
+				return c.JSON(http.StatusTooManyRequests, map[string]interface{}{
+					"error": map[string]interface{}{
+						"message":              "Daily token output limit exceeded",
+						"type":                  "rate_limit_error",
+						"limit_type":            "daily_tokens_out",
+						"limit":                 limitTokensOut,
+						"usage":                 tokensOutCount,
+						"retry_after_seconds":   retryAfter,
+					},
+				})
+			}
+
 			return next(c)
 		}
 	}
+}
+
+func secondsUntilMidnightUTC() int {
+	now := time.Now().UTC()
+	tomorrow := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, time.UTC)
+	s := int(tomorrow.Sub(now).Seconds())
+	if s < 0 {
+		return 0
+	}
+	return s
 }
 
 func KeyAuth(s *store.Store) echo.MiddlewareFunc {
@@ -148,6 +204,10 @@ func KeyAuth(s *store.Store) echo.MiddlewareFunc {
 
 			c.Set("throtl_key_id", key.ID)
 			c.Set("throtl_limit_daily", key.LimitDaily)
+			c.Set("throtl_limit_tokens_in_daily", key.LimitTokensInDaily)
+			c.Set("throtl_limit_tokens_out_daily", key.LimitTokensOutDaily)
+			c.Set("throtl_tokens_in_daily_count", key.TokensInDailyCount)
+			c.Set("throtl_tokens_out_daily_count", key.TokensOutDailyCount)
 			c.Set("throtl_allowed_models", key.AllowedModels)
 			c.Set("throtl_key_obj", key)
 

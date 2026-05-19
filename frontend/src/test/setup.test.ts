@@ -1,3 +1,4 @@
+/// <reference types="vitest/globals" />
 import { api } from '@/lib/api'
 
 test('smoke: basic arithmetic', () => {

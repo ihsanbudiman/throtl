@@ -45,22 +45,20 @@ export interface Provider {
 }
 
 export interface RateLimitStatus {
-  count: number;
-  limit: number;
-  window_hrs: number;
-  reset_at?: string;
-  daily_count: number;
-  daily_limit: number;
-  daily_reset?: string;
+  daily_tokens_in_count: number;
+  daily_tokens_in_limit: number;
+  daily_tokens_out_count: number;
+  daily_tokens_out_limit: number;
+  daily_tokens_reset?: string;
 }
 
 export interface APIKey {
   id: string;
   name: string;
   key: string;
-  limit_window: number;
   limit_daily: number;
-  limit_window_hrs: number;
+  limit_tokens_in_daily: number;
+  limit_tokens_out_daily: number;
   allowed_models: string;
   active: boolean;
   created_at: string;
@@ -158,9 +156,9 @@ export const api = {
   listKeys: () => request<APIKey[]>("/api/keys"),
   createKey: (data: {
     name: string;
-    limit_window?: number;
     limit_daily?: number;
-    limit_window_hrs?: number;
+    limit_tokens_in_daily?: number;
+    limit_tokens_out_daily?: number;
     allowed_models?: string;
   }) => request<APIKey>("/api/keys", { method: "POST", body: JSON.stringify(data) }),
   toggleKey: (id: string, active: boolean) =>

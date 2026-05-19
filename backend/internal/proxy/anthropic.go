@@ -165,6 +165,11 @@ func (a *AnthropicAdapter) proxyChatPassthrough(c echo.Context, provider *model.
 		log.Printf("Anthropic passthrough stream tokens: in=%d out=%d bufLen=%d", inputTokens, outputTokens, streamBuf.Len())
 
 		go func() {
+			if inputTokens > 0 || outputTokens > 0 {
+				if err := a.store.IncrementTokenCount(keyID, inputTokens, outputTokens); err != nil {
+					log.Printf("Failed to increment token count: %v", err)
+				}
+			}
 			latency := int(time.Since(start).Milliseconds())
 			usageLog := &model.UsageLog{
 				ID:        uuid.New().String(),
@@ -193,6 +198,12 @@ func (a *AnthropicAdapter) proxyChatPassthrough(c echo.Context, provider *model.
 	}
 
 	inputTokens, outputTokens := ExtractAnthropicTokens(respBody)
+
+	if inputTokens > 0 || outputTokens > 0 {
+		if err := a.store.IncrementTokenCount(keyID, inputTokens, outputTokens); err != nil {
+			log.Printf("Failed to increment token count: %v", err)
+		}
+	}
 
 	latency := int(time.Since(start).Milliseconds())
 	usageLog := &model.UsageLog{
@@ -270,6 +281,11 @@ func (a *AnthropicAdapter) proxyChatWithTransform(c echo.Context, provider *mode
 		}
 
 		go func() {
+			if inputTokens > 0 || outputTokens > 0 {
+				if err := a.store.IncrementTokenCount(keyID, inputTokens, outputTokens); err != nil {
+					log.Printf("Failed to increment token count: %v", err)
+				}
+			}
 			latency := int(time.Since(start).Milliseconds())
 			usageLog := &model.UsageLog{
 				ID:        uuid.New().String(),
@@ -302,6 +318,12 @@ func (a *AnthropicAdapter) proxyChatWithTransform(c echo.Context, provider *mode
 	openaiBody := AnthropicToOpenAIResponse(respBody)
 	if openaiBody == nil {
 		openaiBody = respBody
+	}
+
+	if inputTokens > 0 || outputTokens > 0 {
+		if err := a.store.IncrementTokenCount(keyID, inputTokens, outputTokens); err != nil {
+			log.Printf("Failed to increment token count: %v", err)
+		}
 	}
 
 	latency := int(time.Since(start).Milliseconds())

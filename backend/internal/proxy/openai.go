@@ -106,6 +106,11 @@ func (a *OpenAIAdapter) ProxyChat(c echo.Context, provider *model.Provider, body
 
 		tokensIn, tokensOut := extractStreamTokens(streamBuf.String())
 		go func() {
+			if tokensIn > 0 || tokensOut > 0 {
+				if err := a.store.IncrementTokenCount(keyID, tokensIn, tokensOut); err != nil {
+					log.Printf("Failed to increment token count: %v", err)
+				}
+			}
 			latency := int(time.Since(start).Milliseconds())
 			usageLog := &model.UsageLog{
 				ID:        uuid.New().String(),
@@ -135,6 +140,11 @@ func (a *OpenAIAdapter) ProxyChat(c echo.Context, provider *model.Provider, body
 
 	latency := int(time.Since(start).Milliseconds())
 	tokensIn, tokensOut := extractTokens(respBody)
+	if tokensIn > 0 || tokensOut > 0 {
+		if err := a.store.IncrementTokenCount(keyID, tokensIn, tokensOut); err != nil {
+			log.Printf("Failed to increment token count: %v", err)
+		}
+	}
 	usageLog := &model.UsageLog{
 		ID:        uuid.New().String(),
 		APIKeyID:  keyID,

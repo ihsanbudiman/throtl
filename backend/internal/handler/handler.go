@@ -251,13 +251,15 @@ func (h *Handler) CreateAPIKey(c echo.Context) error {
 	shareKey := "sk-share-" + uuid.New().String()
 
 	k := &model.APIKey{
-		ID:            uuid.New().String()[:8],
-		Name:          req.Name,
-		Key:           shareKey,
-		LimitDaily:    req.LimitDaily,
-		AllowedModels: req.AllowedModels,
-		Active:        true,
-		CreatedAt:     time.Now(),
+		ID:                  uuid.New().String()[:8],
+		Name:                req.Name,
+		Key:                 shareKey,
+		LimitDaily:          req.LimitDaily,
+		LimitTokensInDaily:  req.LimitTokensInDaily,
+		LimitTokensOutDaily: req.LimitTokensOutDaily,
+		AllowedModels:       req.AllowedModels,
+		Active:              true,
+		CreatedAt:           time.Now(),
 	}
 
 	if err := h.store.CreateAPIKey(k); err != nil {
