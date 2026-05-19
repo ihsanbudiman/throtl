@@ -16,7 +16,7 @@ func NewRateLimiter(s *store.Store) *RateLimiter {
 	return &RateLimiter{store: s}
 }
 
-func (rl *RateLimiter) Check(keyID string, dailyLimit int) (bool, int, string) {
+func (rl *RateLimiter) Check(keyID string, dailyLimit int) (bool, int, string, int) {
 	now := time.Now()
 
 	// --- Daily limit check (resets at 00:00 UTC) ---
@@ -24,7 +24,7 @@ func (rl *RateLimiter) Check(keyID string, dailyLimit int) (bool, int, string) {
 		today := now.UTC().Format("2006-01-02")
 		dailyDate, dailyCount, err := rl.store.GetDailyCount(keyID)
 		if err != nil {
-			return true, 0, ""
+			return true, 0, "", 0
 		}
 
 		if dailyDate != today {
@@ -38,12 +38,15 @@ func (rl *RateLimiter) Check(keyID string, dailyLimit int) (bool, int, string) {
 			if retryAfter < 0 {
 				retryAfter = 0
 			}
-			return false, retryAfter, "Daily rate limit exceeded"
+			return false, retryAfter, "Daily rate limit exceeded", dailyCount
 		}
+
+		rl.store.IncrementDailyCount(keyID)
+		return true, 0, "", dailyCount
 	}
 
 	rl.store.IncrementDailyCount(keyID)
-	return true, 0, ""
+	return true, 0, "", 0
 }
 
 type KeyRateLimitStatus struct {
@@ -97,7 +100,7 @@ func (rl *RateLimiter) Middleware() echo.MiddlewareFunc {
 			}
 			dailyLimit, _ := c.Get("throtl_limit_daily").(int)
 
-			allowed, retryAfter, reason := rl.Check(keyID, dailyLimit)
+			allowed, retryAfter, reason, dailyCount := rl.Check(keyID, dailyLimit)
 			if !allowed {
 				c.Response().Header().Set("Retry-After", time.Now().Add(time.Duration(retryAfter)*time.Second).Format(time.RFC1123))
 				return c.JSON(http.StatusTooManyRequests, map[string]interface{}{
@@ -106,7 +109,7 @@ func (rl *RateLimiter) Middleware() echo.MiddlewareFunc {
 						"type":                  "rate_limit_error",
 						"limit_type":            "daily_requests",
 						"limit":                 dailyLimit,
-						"usage":                 dailyLimit,
+						"usage":                 dailyCount,
 						"retry_after_seconds":   retryAfter,
 					},
 				})

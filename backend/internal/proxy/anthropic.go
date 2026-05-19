@@ -199,12 +199,6 @@ func (a *AnthropicAdapter) proxyChatPassthrough(c echo.Context, provider *model.
 
 	inputTokens, outputTokens := ExtractAnthropicTokens(respBody)
 
-	if inputTokens > 0 || outputTokens > 0 {
-		if err := a.store.IncrementTokenCount(keyID, inputTokens, outputTokens); err != nil {
-			log.Printf("Failed to increment token count: %v", err)
-		}
-	}
-
 	latency := int(time.Since(start).Milliseconds())
 	usageLog := &model.UsageLog{
 		ID:        uuid.New().String(),
@@ -217,10 +211,18 @@ func (a *AnthropicAdapter) proxyChatPassthrough(c echo.Context, provider *model.
 		LatencyMs: latency,
 		CreatedAt: time.Now(),
 	}
-	if err := a.store.CreateUsageLog(usageLog); err != nil {
-		log.Printf("Failed to log usage: %v", err)
-	}
-	go func() { _ = a.store.UpdateLastUsed(keyID) }()
+
+	go func() {
+		if inputTokens > 0 || outputTokens > 0 {
+			if err := a.store.IncrementTokenCount(keyID, inputTokens, outputTokens); err != nil {
+				log.Printf("Failed to increment token count: %v", err)
+			}
+		}
+		if err := a.store.CreateUsageLog(usageLog); err != nil {
+			log.Printf("Failed to log usage: %v", err)
+		}
+		_ = a.store.UpdateLastUsed(keyID)
+	}()
 
 	for k, vs := range upstreamResp.Header {
 		for _, v := range vs {
@@ -320,12 +322,6 @@ func (a *AnthropicAdapter) proxyChatWithTransform(c echo.Context, provider *mode
 		openaiBody = respBody
 	}
 
-	if inputTokens > 0 || outputTokens > 0 {
-		if err := a.store.IncrementTokenCount(keyID, inputTokens, outputTokens); err != nil {
-			log.Printf("Failed to increment token count: %v", err)
-		}
-	}
-
 	latency := int(time.Since(start).Milliseconds())
 	usageLog := &model.UsageLog{
 		ID:        uuid.New().String(),
@@ -338,11 +334,16 @@ func (a *AnthropicAdapter) proxyChatWithTransform(c echo.Context, provider *mode
 		LatencyMs: latency,
 		CreatedAt: time.Now(),
 	}
-	if err := a.store.CreateUsageLog(usageLog); err != nil {
-		log.Printf("Failed to log usage: %v", err)
-	}
 
 	go func() {
+		if inputTokens > 0 || outputTokens > 0 {
+			if err := a.store.IncrementTokenCount(keyID, inputTokens, outputTokens); err != nil {
+				log.Printf("Failed to increment token count: %v", err)
+			}
+		}
+		if err := a.store.CreateUsageLog(usageLog); err != nil {
+			log.Printf("Failed to log usage: %v", err)
+		}
 		_ = a.store.UpdateLastUsed(keyID)
 	}()
 

@@ -190,8 +190,11 @@ func TestDailyRequestLimitExceeded(t *testing.T) {
 
 	var body struct {
 		Error struct {
-			LimitType string `json:"limit_type"`
-			Type      string `json:"type"`
+			LimitType          string `json:"limit_type"`
+			Type               string `json:"type"`
+			Limit              int    `json:"limit"`
+			Usage              int    `json:"usage"`
+			RetryAfterSeconds  int    `json:"retry_after_seconds"`
 		} `json:"error"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
@@ -202,6 +205,15 @@ func TestDailyRequestLimitExceeded(t *testing.T) {
 	}
 	if body.Error.Type != "rate_limit_error" {
 		t.Errorf("type = %q, want %q", body.Error.Type, "rate_limit_error")
+	}
+	if body.Error.Limit != k.LimitDaily {
+		t.Errorf("limit = %d, want %d", body.Error.Limit, k.LimitDaily)
+	}
+	if body.Error.Usage != k.LimitDaily {
+		t.Errorf("usage = %d, want %d (actual daily count)", body.Error.Usage, k.LimitDaily)
+	}
+	if body.Error.RetryAfterSeconds <= 0 {
+		t.Errorf("retry_after_seconds = %d, want > 0", body.Error.RetryAfterSeconds)
 	}
 }
 

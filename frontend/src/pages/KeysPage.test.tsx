@@ -80,8 +80,8 @@ describe("KeysPage", () => {
 
     expect(screen.getByText("42/100")).toBeInTheDocument();
 
-    expect(screen.getByText("In: 12000/50000")).toBeInTheDocument();
-    expect(screen.getByText("Out: 8000/25000")).toBeInTheDocument();
+    expect(screen.getAllByText("In: 12000/50000")).toHaveLength(2);
+    expect(screen.getAllByText("Out: 8000/25000")).toHaveLength(2);
 
     expect(screen.queryByText(/Rolling Window/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Per \(hours\)/i)).not.toBeInTheDocument();
