@@ -72,6 +72,8 @@ func main() {
 	// Providers
 	api.GET("/providers", h.ListProviders)
 	api.POST("/providers", h.CreateProvider)
+	api.PUT("/providers/:id", h.UpdateProvider)
+	api.POST("/providers/test", h.TestConnection)
 	api.DELETE("/providers/:id", h.DeleteProvider)
 
 	// API Keys

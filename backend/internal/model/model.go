@@ -80,11 +80,33 @@ type CreateAPIKeyRequest struct {
 
 // CreateProviderRequest is the input for adding a provider
 type CreateProviderRequest struct {
-	ID      string `json:"id" validate:"required"`
-	Name    string `json:"name" validate:"required"`
-	Type    string `json:"type" validate:"required"`
-	BaseURL string `json:"base_url" validate:"required"`
-	APIKey  string `json:"api_key" validate:"required"`
+	ID      string   `json:"id" validate:"required"`
+	Name    string   `json:"name" validate:"required"`
+	Type    string   `json:"type" validate:"required"`
+	BaseURL string   `json:"base_url" validate:"required"`
+	APIKey  string   `json:"api_key" validate:"required"`
+	Models  []string `json:"models,omitempty"`
+}
+
+// TestConnectionRequest validates a provider connection
+type TestConnectionRequest struct {
+	Type    string   `json:"type"`
+	BaseURL string   `json:"base_url"`
+	APIKey  string   `json:"api_key"`
+	Models  []string `json:"models,omitempty"`
+}
+
+// ModelTestResult reports the test result for a single model
+type ModelTestResult struct {
+	OK    bool   `json:"ok"`
+	Error string `json:"error,omitempty"`
+}
+
+// TestConnectionResponse reports the result of a connection test
+type TestConnectionResponse struct {
+	OK     bool                       `json:"ok"`
+	Models map[string]ModelTestResult `json:"models,omitempty"`
+	Error  string                     `json:"error,omitempty"`
 }
 
 // DashboardStats is the overview data
@@ -123,6 +145,16 @@ type ModelOverride struct {
 	Active           bool      `json:"active"`
 	RequestMultiplier int      `json:"request_multiplier"`
 	CreatedAt        time.Time `json:"created_at"`
+}
+
+type ModelEntry struct {
+	ID                string `json:"id"`
+	Object            string `json:"object"`
+	Created           int64  `json:"created"`
+	OwnedBy           string `json:"owned_by"`
+	ProviderID        string `json:"provider_id"`
+	Active            bool   `json:"active"`
+	RequestMultiplier int    `json:"request_multiplier"`
 }
 
 type UpdateModelOverrideRequest struct {

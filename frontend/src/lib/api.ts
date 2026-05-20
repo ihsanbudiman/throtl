@@ -130,6 +130,17 @@ export interface AuthResponse {
   user: AuthUser;
 }
 
+export interface ModelTestResult {
+  ok: boolean;
+  error?: string;
+}
+
+export interface TestConnectionResponse {
+  ok: boolean;
+  models?: Record<string, ModelTestResult>;
+  error?: string;
+}
+
 // --- API Calls ---
 
 export const api = {
@@ -149,8 +160,12 @@ export const api = {
 
   // Providers
   listProviders: () => request<Provider[]>("/api/providers"),
-  createProvider: (data: { id: string; name: string; type: string; base_url: string; api_key: string }) =>
+  testProviderConnection: (data: { type: string; base_url: string; api_key: string; models?: string[] }) =>
+    request<TestConnectionResponse>("/api/providers/test", { method: "POST", body: JSON.stringify(data) }),
+  createProvider: (data: { id: string; name: string; type: string; base_url: string; api_key: string; models?: string[] }) =>
     request<Provider>("/api/providers", { method: "POST", body: JSON.stringify(data) }),
+  updateProvider: (id: string, data: { name: string; type: string; base_url: string; api_key: string; models?: string[] }) =>
+    request<Provider>(`/api/providers/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteProvider: (id: string) =>
     request<void>(`/api/providers/${id}`, { method: "DELETE" }),
 

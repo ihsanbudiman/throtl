@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -148,11 +149,22 @@ func (g *Gateway) ListModels(c echo.Context) error {
 		})
 	}
 
-	overrides, _ := g.store.ListModelOverrides()
-	disabledSet := make(map[string]bool)
-	for _, o := range overrides {
-		if !o.Active {
-			disabledSet[o.ProviderID+"/"+o.ModelName] = true
+	overrides, err := g.store.ListModelOverrides()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": map[string]string{"message": "Failed to list model overrides"},
+		})
+	}
+
+	providerMap := make(map[string]model.Provider)
+	for _, p := range providers {
+		providerMap[p.ID] = p
+	}
+
+	disabledLookup := make(map[string]bool)
+	for _, mo := range overrides {
+		if !mo.Active {
+			disabledLookup[mo.ProviderID+"/"+mo.ModelName] = true
 		}
 	}
 
@@ -164,21 +176,36 @@ func (g *Gateway) ListModels(c echo.Context) error {
 		}
 	}
 
-	var data []ModelEntry
-
-	for _, provider := range providers {
-		adapter := NewAdapter(provider.Type, g.store)
-		entries, err := adapter.ListModels(c, &provider, disabledSet, allowedSet)
-		if err != nil {
-			log.Printf("Failed to list models from %s: %v", provider.ID, err)
+	var models []ModelEntry
+	for _, mo := range overrides {
+		provider, ok := providerMap[mo.ProviderID]
+		if !ok {
 			continue
 		}
-		data = append(data, entries...)
+
+		modelID := fmt.Sprintf("%s/%s", provider.ID, mo.ModelName)
+
+		if disabledLookup[modelID] || !mo.Active {
+			continue
+		}
+
+		if len(allowedSet) > 0 && !allowedSet[modelID] {
+			continue
+		}
+
+		models = append(models, ModelEntry{
+			ID:                modelID,
+			Object:            "model",
+			Created:           mo.CreatedAt.Unix(),
+			OwnedBy:           provider.ID,
+			Active:            mo.Active,
+			RequestMultiplier: mo.RequestMultiplier,
+		})
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"object": "list",
-		"data":   data,
+		"data":   models,
 	})
 }
 

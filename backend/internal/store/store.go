@@ -148,7 +148,16 @@ func (s *Store) GetProvider(id string) (*model.Provider, error) {
 }
 
 func (s *Store) DeleteProvider(id string) error {
+	if err := s.DeleteModelOverridesByProvider(id); err != nil {
+		return err
+	}
 	_, err := s.db.Exec(`DELETE FROM providers WHERE id = ?`, id)
+	return err
+}
+
+func (s *Store) UpdateProvider(p *model.Provider) error {
+	_, err := s.db.Exec(`UPDATE providers SET name = ?, type = ?, base_url = ?, api_key = ? WHERE id = ?`,
+		p.Name, p.Type, p.BaseURL, p.APIKey, p.ID)
 	return err
 }
 

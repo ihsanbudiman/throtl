@@ -1,6 +1,10 @@
 package handler
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -156,55 +160,219 @@ func (h *Handler) ListProviders(c echo.Context) error {
 func (h *Handler) CreateProvider(c echo.Context) error {
 	var req model.CreateProviderRequest
 	if err := c.Bind(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
-	if req.ID == "" || req.Name == "" || req.BaseURL == "" || req.APIKey == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "id, name, base_url, and api_key are required"})
+	if req.Name == "" || req.Type == "" || req.BaseURL == "" || req.APIKey == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "name, type, base_url, and api_key are required"})
 	}
-
 	if req.Type != "openai" && req.Type != "anthropic" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "type must be 'openai' or 'anthropic'"})
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "type must be openai or anthropic"})
+	}
+	if req.ID == "" || len(req.ID) > 32 || !isValidID(req.ID) {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "id must be lowercase alphanumeric + hyphens, max 32 chars"})
 	}
 
-	if !isValidID(req.ID) {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "id must be lowercase alphanumeric with hyphens (e.g. wafer, openai-us)"})
+	p := model.Provider{
+		ID:      req.ID,
+		Name:    req.Name,
+		Type:    req.Type,
+		BaseURL: strings.TrimRight(req.BaseURL, "/"),
+		APIKey:  req.APIKey,
 	}
 
-	p := &model.Provider{
-		ID:        req.ID,
-		Name:      req.Name,
-		Type:      req.Type,
-		BaseURL:   strings.TrimRight(req.BaseURL, "/"),
-		APIKey:    req.APIKey,
-		CreatedAt: time.Now(),
-	}
-	if err := h.store.CreateProvider(p); err != nil {
+	if err := h.store.CreateProvider(&p); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
-	go func() {
-		gw := proxy.NewGateway(h.store)
-		models, err := gw.FetchModelsForProvider(p)
-		if err != nil {
-			log.Printf("Failed to fetch models from %s on creation: %v", p.ID, err)
-			return
+	// Upsert model overrides for manually provided models
+	for _, modelName := range req.Models {
+		if modelName == "" {
+			continue
 		}
-		for _, m := range models {
-			override := &model.ModelOverride{
-				ID:         p.ID + "/" + m.ID,
-				ProviderID: p.ID,
-				ModelName:  m.ID,
-				Active:     true,
-				CreatedAt:  time.Now(),
-			}
-			if err := h.store.UpsertModelOverride(override); err != nil {
-				log.Printf("Failed to upsert model %s/%s: %v", p.ID, m.ID, err)
-			}
+		mo := &model.ModelOverride{
+			ID:                fmt.Sprintf("%s/%s", p.ID, modelName),
+			ProviderID:        p.ID,
+			ModelName:         modelName,
+			Active:            true,
+			RequestMultiplier: 1,
 		}
-	}()
+		if err := h.store.UpsertModelOverride(mo); err != nil {
+			// Log but don't fail - provider is already created
+			log.Printf("warn: failed to upsert model override for %s/%s: %v", p.ID, modelName, err)
+		}
+	}
 
-	p.APIKey = maskKey(p.APIKey)
+	// Mask API key before returning
+	p.APIKey = p.APIKey[:4] + "..." + p.APIKey[len(p.APIKey)-4:]
 	return c.JSON(http.StatusCreated, p)
+}
+
+func (h *Handler) UpdateProvider(c echo.Context) error {
+	id := c.Param("id")
+	var req model.CreateProviderRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+	if req.Name == "" || req.Type == "" || req.BaseURL == "" || req.APIKey == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "name, type, base_url, and api_key are required"})
+	}
+	if req.Type != "openai" && req.Type != "anthropic" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "type must be openai or anthropic"})
+	}
+
+	existing, err := h.store.GetProvider(id)
+	if err != nil || existing == nil {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "Provider not found"})
+	}
+
+	p := model.Provider{
+		ID:      id,
+		Name:    req.Name,
+		Type:    req.Type,
+		BaseURL: strings.TrimRight(req.BaseURL, "/"),
+		APIKey:  req.APIKey,
+	}
+	if err := h.store.UpdateProvider(&p); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	if err := h.store.DeleteModelOverridesByProvider(id); err != nil {
+		log.Printf("warn: failed to delete old models for provider %s: %v", id, err)
+	}
+
+	for _, modelName := range req.Models {
+		if modelName == "" {
+			continue
+		}
+		mo := &model.ModelOverride{
+			ID:                fmt.Sprintf("%s/%s", id, modelName),
+			ProviderID:        id,
+			ModelName:         modelName,
+			Active:            true,
+			RequestMultiplier: 1,
+		}
+		if err := h.store.UpsertModelOverride(mo); err != nil {
+			log.Printf("warn: failed to upsert model override for %s/%s: %v", id, modelName, err)
+		}
+	}
+
+	p.APIKey = p.APIKey[:4] + "..." + p.APIKey[len(p.APIKey)-4:]
+	return c.JSON(http.StatusOK, p)
+}
+
+func (h *Handler) TestConnection(c echo.Context) error {
+	var req model.TestConnectionRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+	}
+	if req.Type != "openai" && req.Type != "anthropic" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "type must be openai or anthropic"})
+	}
+	if req.BaseURL == "" || req.APIKey == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "base_url and api_key are required"})
+	}
+
+	baseURL := strings.TrimRight(req.BaseURL, "/")
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	if len(req.Models) == 0 {
+		p := model.Provider{
+			Type:    req.Type,
+			BaseURL: baseURL,
+			APIKey:  req.APIKey,
+		}
+		adapter := proxy.NewAdapter(p.Type, h.store)
+		_, err := adapter.FetchModels(&p)
+		if err != nil {
+			return c.JSON(http.StatusOK, model.TestConnectionResponse{OK: false, Error: err.Error()})
+		}
+		return c.JSON(http.StatusOK, model.TestConnectionResponse{OK: true, Models: nil})
+	}
+
+	results := make(map[string]model.ModelTestResult)
+	anyPassed := false
+
+	for _, modelName := range req.Models {
+		result := testModelDirect(client, req.Type, baseURL, req.APIKey, modelName)
+		results[modelName] = result
+		if result.OK {
+			anyPassed = true
+		}
+	}
+
+	resp := model.TestConnectionResponse{
+		OK:     anyPassed,
+		Models: results,
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func testModelDirect(client *http.Client, providerType, baseURL, apiKey, modelName string) model.ModelTestResult {
+	var url string
+	var body []byte
+	var req *http.Request
+	var err error
+
+	// Normalize base URL: remove trailing /v1 or /v1/ to avoid double /v1 in endpoint path
+	baseURL = strings.TrimRight(baseURL, "/")
+	if strings.HasSuffix(baseURL, "/v1") {
+		baseURL = strings.TrimSuffix(baseURL, "/v1")
+	}
+	baseURL = strings.TrimRight(baseURL, "/")
+
+	switch providerType {
+	case "anthropic":
+		url = baseURL + "/v1/messages"
+		body = []byte(`{"model":"` + modelName + `","messages":[{"role":"user","content":"hi"}],"max_tokens":1}`)
+		req, err = http.NewRequest("POST", url, bytes.NewReader(body))
+		if err != nil {
+			return model.ModelTestResult{OK: false, Error: err.Error()}
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("x-api-key", apiKey)
+		req.Header.Set("anthropic-version", "2023-06-01")
+
+	default:
+		url = baseURL + "/v1/chat/completions"
+		body = []byte(`{"model":"` + modelName + `","messages":[{"role":"user","content":"hi"}],"max_tokens":1}`)
+		req, err = http.NewRequest("POST", url, bytes.NewReader(body))
+		if err != nil {
+			return model.ModelTestResult{OK: false, Error: err.Error()}
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return model.ModelTestResult{OK: false, Error: "request failed: " + err.Error()}
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return model.ModelTestResult{OK: false, Error: "failed to read response"}
+	}
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return model.ModelTestResult{OK: true}
+	}
+
+	var errorResp struct {
+		Message string `json:"message"`
+		Error   struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	_ = json.Unmarshal(respBody, &errorResp)
+	msg := errorResp.Message
+	if msg == "" {
+		msg = errorResp.Error.Message
+	}
+	if msg == "" {
+		msg = string(respBody[:min(200, len(respBody))])
+	}
+	return model.ModelTestResult{OK: false, Error: msg}
 }
 
 func (h *Handler) DeleteProvider(c echo.Context) error {
@@ -338,63 +506,43 @@ func (h *Handler) generateToken(userID string) (string, error) {
 	return middleware.GenerateToken(userID, h.jwtSecret)
 }
 
-type ModelEntry struct {
-	ID               string `json:"id"`
-	Object           string `json:"object"`
-	Created          int64  `json:"created"`
-	OwnedBy          string `json:"owned_by"`
-	ProviderID       string `json:"provider_id"`
-	Active           bool   `json:"active"`
-	RequestMultiplier int   `json:"request_multiplier"`
-}
-
 func (h *Handler) ListModels(c echo.Context) error {
 	providers, err := h.store.ListProviders()
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to list providers"})
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
 	overrides, err := h.store.ListModelOverrides()
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to list model overrides"})
-	}
-	overrideMap := make(map[string]model.ModelOverride)
-	for _, o := range overrides {
-		key := o.ProviderID + "/" + o.ModelName
-		overrideMap[key] = o
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
-	gw := proxy.NewGateway(h.store)
-	var data []ModelEntry
-	for _, provider := range providers {
-		models, err := gw.FetchModelsForProvider(&provider)
-		if err != nil {
-			log.Printf("Failed to fetch models from %s: %v", provider.ID, err)
+	providerMap := make(map[string]model.Provider)
+	for _, p := range providers {
+		providerMap[p.ID] = p
+	}
+
+	var models []model.ModelEntry
+	for _, mo := range overrides {
+		provider, ok := providerMap[mo.ProviderID]
+		if !ok {
 			continue
 		}
 
-		for _, m := range models {
-			prefixedID := provider.ID + "/" + m.ID
-			entry := ModelEntry{
-				ID:               prefixedID,
-				Object:           "model",
-				Created:          m.Created,
-				OwnedBy:          provider.ID,
-				ProviderID:       provider.ID,
-				Active:           true,
-				RequestMultiplier: 1,
-			}
-			if o, exists := overrideMap[prefixedID]; exists {
-				entry.Active = o.Active
-				entry.RequestMultiplier = o.RequestMultiplier
-			}
-			data = append(data, entry)
-		}
+		models = append(models, model.ModelEntry{
+			ID:                fmt.Sprintf("%s/%s", provider.ID, mo.ModelName),
+			Object:            "model",
+			Created:           mo.CreatedAt.Unix(),
+			OwnedBy:           provider.ID,
+			ProviderID:        provider.ID,
+			Active:            mo.Active,
+			RequestMultiplier: mo.RequestMultiplier,
+		})
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"object": "list",
-		"data":   data,
+		"data":   models,
 	})
 }
 
