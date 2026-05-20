@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Trash2, Server, Globe, KeyRound, Plus } from "lucide-react";
 
@@ -158,15 +159,15 @@ export default function ProvidersPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="ptype">Provider Type</Label>
-                <select
-                  id="ptype"
-                  className="flex h-9 w-full rounded-none border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  value={formType}
-                  onChange={(e) => setFormType(e.target.value)}
-                >
-                  <option value="openai">OpenAI Compatible</option>
-                  <option value="anthropic">Anthropic</option>
-                </select>
+                <Select value={formType} onValueChange={(v) => { if (v) setFormType(v); }}>
+                  <SelectTrigger id="ptype">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="openai">OpenAI Compatible</SelectItem>
+                    <SelectItem value="anthropic">Anthropic</SelectItem>
+                  </SelectContent>
+                </Select>
                 <p className="text-xs text-muted-foreground">
                   {formType === "openai"
                     ? "Any API that follows the /v1/chat/completions format"
