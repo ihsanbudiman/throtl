@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import GenerateKeyDialog from "@/components/GenerateKeyDialog";
-import { Copy, Trash2, Check, KeyRound, Infinity as InfinityIcon } from "lucide-react";
+import { Copy, Trash2, Check, KeyRound, Infinity as InfinityIcon, RotateCcw } from "lucide-react";
 
 function formatDailyReset(iso: string): string {
   const d = new Date(iso);
@@ -39,6 +39,12 @@ export default function KeysPage() {
   };
 
   const handleToggle = async (id: string, active: boolean) => { await api.toggleKey(id, !active); loadKeys(); };
+
+  const handleReset = async (id: string, name: string) => {
+    await api.resetKeyLimit(id);
+    toast({ title: "Limits reset", description: name });
+    loadKeys();
+  };
 
   const copyKey = (key: string) => {
     navigator.clipboard.writeText(key);
@@ -116,6 +122,7 @@ export default function KeysPage() {
                        <TableHead>Models</TableHead>
                        <TableHead>Status</TableHead>
                        <TableHead>Last Used</TableHead>
+                       <TableHead>Reset</TableHead>
                        <TableHead className="w-10" />
                      </TableRow>
                   </TableHeader>
@@ -153,6 +160,11 @@ export default function KeysPage() {
                         <TableCell><Switch checked={key.active} onCheckedChange={() => handleToggle(key.id, key.active)} /></TableCell>
                         <TableCell className="text-sm text-muted-foreground">{key.last_used_at ? new Date(key.last_used_at).toLocaleDateString() : "Never"}</TableCell>
                         <TableCell>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary" onClick={() => handleReset(key.id, key.name)}>
+                            <RotateCcw className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                        <TableCell>
                           <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => setDeleteKey(key)}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -180,9 +192,14 @@ export default function KeysPage() {
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-muted-foreground">{key.last_used_at ? `Last used ${new Date(key.last_used_at).toLocaleDateString()}` : "Never used"}</span>
-                      <Button variant="ghost" size="icon-sm" className="text-muted-foreground hover:text-destructive" onClick={() => setDeleteKey(key)}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="icon-sm" className="text-muted-foreground hover:text-primary" onClick={() => handleReset(key.id, key.name)}>
+                          <RotateCcw className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="icon-sm" className="text-muted-foreground hover:text-destructive" onClick={() => setDeleteKey(key)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 ))}

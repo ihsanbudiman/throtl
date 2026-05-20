@@ -287,6 +287,15 @@ func (h *Handler) DeleteAPIKey(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+func (h *Handler) ResetAPIKeyLimits(c echo.Context) error {
+	id := c.Param("id")
+	today := time.Now().UTC().Format("2006-01-02")
+	if err := h.store.ResetDailyCount(id, today); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
 // --- Dashboard ---
 
 func (h *Handler) GetStats(c echo.Context) error {

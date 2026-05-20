@@ -79,6 +79,7 @@ func main() {
 	api.POST("/keys", h.CreateAPIKey)
 	api.PATCH("/keys/:id", h.ToggleAPIKey)
 	api.DELETE("/keys/:id", h.DeleteAPIKey)
+	api.POST("/keys/:id/reset", h.ResetAPIKeyLimits)
 
 	// Models
 	api.GET("/models", h.ListModels)

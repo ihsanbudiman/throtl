@@ -167,6 +167,8 @@ export const api = {
     request<void>(`/api/keys/${id}?active=${active}`, { method: "PATCH" }),
   deleteKey: (id: string) =>
     request<void>(`/api/keys/${id}`, { method: "DELETE" }),
+  resetKeyLimit: (id: string) =>
+    request<void>(`/api/keys/${id}/reset`, { method: "POST" }),
 
   // Models
   listModels: () => request<{ object: string; data: Model[] }>("/api/models"),
