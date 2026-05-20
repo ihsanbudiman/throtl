@@ -139,11 +139,11 @@
   --color-accent-midnight: #0d1726;
 
   /* Chart aliases (backward compat) */
-  --color-chart-1: #ff7a17;
-  --color-chart-2: #7c3aed;
+  --color-chart-1: #3b82f6;
+  --color-chart-2: #60a5fa;
   --color-chart-3: #a0c3ec;
-  --color-chart-4: #c4b5fd;
-  --color-chart-5: #ffc285;
+  --color-chart-4: #93c5fd;
+  --color-chart-5: #bfdbfe;
 
   /* Radius — single sm(8px) + pill(9999px) system */
   --radius: 8px;
@@ -160,8 +160,8 @@
   --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
   --font-heading: "Inter", system-ui, -apple-system, sans-serif;
 
-  /* Logo icon — invert dark logo to white on dark bg */
-  --logo-filter: invert(1);
+  /* Logo icon — blue works on both themes */
+  --logo-filter: none;
 }
 
 /* ── Light mode overrides ── */

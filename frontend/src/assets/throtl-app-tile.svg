@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="Throtl app tile">
   <title>Throtl app tile</title>
-  <rect x="0" y="0" width="120" height="120" rx="24" fill="#0D9488"/>
+  <rect x="0" y="0" width="120" height="120" rx="24" fill="#3b82f6"/>
   <g transform="translate(60, 60)">
     <circle cx="0" cy="0" r="34" fill="none" stroke="#ffffff" stroke-width="4"/>
     <g transform="rotate(-22)">

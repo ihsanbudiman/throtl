@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from "react";
-import { api, type Provider } from "@/lib/api";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { api, type Provider, type Model } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,9 +14,9 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Server, Globe, KeyRound, Plus } from "lucide-react";
+import { Trash2, Server, Globe, KeyRound, Plus, Loader2, CheckCircle2, XCircle, X, Pencil } from "lucide-react";
 
 const PROVIDER_ACCENTS = [
   "from-chart-1/[0.04] to-transparent",
@@ -42,11 +42,20 @@ export default function ProvidersPage() {
 
   // Form state
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
   const [formID, setFormID] = useState("");
   const [formName, setFormName] = useState("");
   const [formType, setFormType] = useState("openai");
   const [formBaseURL, setFormBaseURL] = useState("");
   const [formAPIKey, setFormAPIKey] = useState("");
+  const [realAPIKey, setRealAPIKey] = useState("");
+  const [formModels, setFormModels] = useState<string[]>([]);
+  const [modelInput, setModelInput] = useState("");
+  const [testing, setTesting] = useState(false);
+  const [testStatus, setTestStatus] = useState<"idle" | "passed" | "failed">("idle");
+  const [testError, setTestError] = useState("");
+  const [testResults, setTestResults] = useState<Record<string, { ok: boolean; error?: string }>>({});
+  const modelInputRef = useRef<HTMLInputElement>(null);
 
   const loadProviders = useCallback(async () => {
     const p = await api.listProviders();
@@ -58,21 +67,124 @@ export default function ProvidersPage() {
     loadProviders();
   }, [loadProviders]);
 
-  const handleCreate = async () => {
-    await api.createProvider({
-      id: formID,
-      name: formName,
-      type: formType,
-      base_url: formBaseURL,
-      api_key: formAPIKey,
+  const addModel = () => {
+    const trimmed = modelInput.trim();
+    if (trimmed && !formModels.includes(trimmed)) {
+      setFormModels([...formModels, trimmed]);
+      setModelInput("");
+      setTestStatus("idle");
+      setTestResults({});
+      modelInputRef.current?.focus();
+    }
+  };
+
+  const removeModel = (name: string) => {
+    setFormModels(formModels.filter((m) => m !== name));
+    setTestStatus("idle");
+    setTestResults({});
+  };
+
+  const handleModelKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addModel();
+    }
+  };
+
+  const handleTestConnection = async () => {
+    setTesting(true);
+    setTestStatus("idle");
+    setTestResults({});
+    try {
+      const result = await api.testProviderConnection({
+        type: formType,
+        base_url: formBaseURL,
+        api_key: realAPIKey || formAPIKey,
+        models: formModels.length > 0 ? formModels : undefined,
+      });
+      if (result.ok) {
+        setTestStatus("passed");
+        if (result.models) {
+          setTestResults(result.models);
+        }
+      } else {
+        setTestStatus("failed");
+        if (result.models) {
+          setTestResults(result.models);
+          const passed = Object.values(result.models).filter((t) => t.ok).length;
+          if (passed > 0) {
+            setTestStatus("passed");
+          } else {
+            setTestError(result.error || "All models failed");
+          }
+        } else {
+          setTestError(result.error || "Connection failed");
+        }
+      }
+    } catch (err) {
+      setTestStatus("failed");
+      setTestError(err instanceof Error ? err.message : "Connection failed");
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const handleStartEdit = async (p: Provider) => {
+    setEditingProvider(p);
+    setFormID(p.id);
+    setFormName(p.name);
+    setFormType(p.type);
+    setFormBaseURL(p.base_url);
+    setFormAPIKey("");
+    setRealAPIKey("");
+    const modelsResp = await api.listModels();
+    const provModels = (modelsResp?.data || []).filter((m: Model) => m.provider_id === p.id);
+    const modelNames = provModels.map((m: Model) => {
+      const bare = m.id.includes("/") ? m.id.split("/").slice(1).join("/") : m.id;
+      return bare;
     });
+    setFormModels(modelNames);
+    setDialogOpen(true);
+  };
+
+  const handleSave = async () => {
+    if (editingProvider) {
+      await api.updateProvider(editingProvider.id, {
+        name: formName,
+        type: formType,
+        base_url: formBaseURL,
+        api_key: realAPIKey || formAPIKey,
+        models: formModels,
+      });
+    } else {
+      await api.createProvider({
+        id: formID,
+        name: formName,
+        type: formType,
+        base_url: formBaseURL,
+        api_key: realAPIKey || formAPIKey,
+        models: formModels,
+      });
+    }
+    resetForm();
     setDialogOpen(false);
+    loadProviders();
+  };
+
+  const resetForm = () => {
     setFormID("");
     setFormName("");
     setFormType("openai");
     setFormBaseURL("");
     setFormAPIKey("");
-    loadProviders();
+    setRealAPIKey("");
+    setFormModels([]);
+    setModelInput("");
+    setTesting(false);
+    setTestStatus("idle");
+    setTestError("");
+    setTestResults({});
+    setEditingProvider(null);
   };
 
   const handleDelete = async (id: string) => {
@@ -121,7 +233,7 @@ export default function ProvidersPage() {
             Manage upstream AI providers and their API keys
           </p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) { resetForm(); } setDialogOpen(open); }}>
           <DialogTrigger>
             <Button>
               <Plus className="h-4 w-4 mr-2" />
@@ -130,24 +242,29 @@ export default function ProvidersPage() {
           </DialogTrigger>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
-              <DialogTitle>Add Provider</DialogTitle>
+              <DialogTitle>{editingProvider ? "Edit Provider" : "Add Provider"}</DialogTitle>
               <DialogDescription>
-                Connect an upstream AI provider. The API key is stored locally and used to proxy requests.
+                {editingProvider
+                  ? "Update provider details and add models."
+                  : "Connect an upstream AI provider. The API key is stored locally and used to proxy requests."}
               </DialogDescription>
             </DialogHeader>
+
             <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="pid">Provider ID</Label>
-                <Input
-                  id="pid"
-                  placeholder="e.g. wafer, openai, anthropic"
-                  value={formID}
-                  onChange={(e) => setFormID(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Used in model calls: <code className="bg-muted px-1">{formID || "id"}/model-name</code>
-                </p>
-              </div>
+              {!editingProvider && (
+                <div className="space-y-2">
+                  <Label htmlFor="pid">Provider ID</Label>
+                  <Input
+                    id="pid"
+                    placeholder="e.g. wafer, openai, anthropic"
+                    value={formID}
+                    onChange={(e) => setFormID(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Used in model calls: <code className="bg-muted px-1">{formID || "id"}/model-name</code>
+                  </p>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="pname">Provider Name</Label>
                 <Input
@@ -160,8 +277,8 @@ export default function ProvidersPage() {
               <div className="space-y-2">
                 <Label htmlFor="ptype">Provider Type</Label>
                 <Select value={formType} onValueChange={(v) => { if (v) setFormType(v); }}>
-                  <SelectTrigger id="ptype">
-                    <SelectValue placeholder="Select type" />
+                  <SelectTrigger id="ptype" className="w-full">
+                    {formType === "openai" ? "OpenAI Compatible" : "Anthropic"}
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="openai">OpenAI Compatible</SelectItem>
@@ -195,20 +312,99 @@ export default function ProvidersPage() {
                   type="password"
                   placeholder="sk-..."
                   value={formAPIKey}
-                  onChange={(e) => setFormAPIKey(e.target.value)}
+                  onChange={(e) => { setFormAPIKey(e.target.value); setRealAPIKey(e.target.value); }}
                 />
+                {editingProvider && (
+                  <p className="text-xs text-muted-foreground">
+                    Re-enter the API key to test connection and save.
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label>Models</Label>
+                <div className="flex gap-2">
+                  <Input
+                    ref={modelInputRef}
+                    placeholder="e.g. claude-3-5-sonnet-latest"
+                    value={modelInput}
+                    onChange={(e) => setModelInput(e.target.value)}
+                    onKeyDown={handleModelKeyDown}
+                  />
+                  <Button type="button" variant="outline" size="sm" onClick={addModel} disabled={!modelInput.trim()}>
+                    Add
+                  </Button>
+                </div>
+                {formModels.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {formModels.map((m) => {
+                      const test = testResults[m];
+                      const tested = test !== undefined;
+                      return (
+                        <Badge
+                          key={m}
+                          variant={tested && test.ok ? "default" : "secondary"}
+                          className={`text-xs gap-1 !normal-case ${tested && test.ok ? "bg-primary/15 text-primary border-primary/30" : ""}`}
+                        >
+                          {tested && test.ok && <CheckCircle2 className="h-3 w-3 text-primary" />}
+                          {tested && !test.ok && <XCircle className="h-3 w-3 text-destructive" />}
+                          {m}
+                          <button type="button" onClick={() => removeModel(m)} className="ml-0.5 hover:text-destructive">
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Add model names one at a time. Press Enter or click Add.
+                </p>
               </div>
             </div>
+
+            {Object.keys(testResults).length > 0 && (
+              <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2">
+                <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
+                <p className="text-xs text-primary">
+                  {Object.values(testResults).filter((t) => t.ok).length}/{Object.keys(testResults).length} models accessible
+                </p>
+              </div>
+            )}
+
+            {testStatus === "failed" && Object.keys(testResults).length === 0 && (
+              <div className="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2">
+                <XCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs text-destructive font-medium">Connection failed</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{testError}</p>
+                </div>
+              </div>
+            )}
+
             <DialogFooter>
               <Button variant="outline" onClick={() => setDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button
-                onClick={handleCreate}
-                disabled={!formID || !formName || !formBaseURL || !formAPIKey}
-              >
-                Add Provider
-              </Button>
+              {(formModels.length === 0 && testStatus === "passed") || (formModels.length > 0 && formModels.every((m) => testResults[m]?.ok)) ? (
+                <Button onClick={handleSave}>
+                  {editingProvider ? "Update Provider" : "Save Provider"}
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleTestConnection}
+                  disabled={!(editingProvider ? true : formID) || !formName || !formBaseURL || !formAPIKey || formModels.length === 0 || testing}
+                >
+                  {testing ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                      Testing...
+                    </>
+                  ) : (
+                    "Test Connection"
+                  )}
+                </Button>
+              )}
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -244,14 +440,24 @@ export default function ProvidersPage() {
                       {p.type === "anthropic" ? "Anthropic" : "OpenAI"}
                     </Badge>
                   </CardTitle>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 opacity-50 hover:opacity-100 transition-all duration-200 text-body-mid hover:text-destructive"
-                    onClick={() => setDeleteConfirm(p)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 opacity-50 hover:opacity-100 transition-all duration-200 text-body-mid hover:text-primary"
+                      onClick={() => handleStartEdit(p)}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 opacity-50 hover:opacity-100 transition-all duration-200 text-body-mid hover:text-destructive"
+                      onClick={() => setDeleteConfirm(p)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-3">
