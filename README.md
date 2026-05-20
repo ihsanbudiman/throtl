@@ -4,7 +4,7 @@
 
 Throtl is an API gateway that lets you share your AI subscription — GLM 5.1, Kimi K2.6, or any OpenAI-compatible provider — with your team, friends, or clients, while keeping full control over who uses what, and how much.
 
-> **Note:** Throtl currently supports OpenAI-compatible providers only (any API that follows the `/v1/chat/completions` and `/v1/models` convention).
+> **Note:** Throtl supports OpenAI-compatible providers and Anthropic (with automatic format conversion).
 
 ---
 
@@ -37,7 +37,7 @@ Connect multiple AI providers and see every available model in one place. Disabl
 
 ### 📊 Usage Dashboard
 
-See who's using what, how many tokens are flowing, and which models are popular — all in real time.
+See who's using what, how many tokens are flowing, and which models are popular — all in real time. Interactive charts with date range filters (Today, 7 days, 30 days), per-key breakdowns, and model usage pie charts.
 
 ### 🌙 Dark Mode
 
@@ -88,9 +88,10 @@ That's it. Open **http://localhost:3000** and create your admin account.
 ### First-Time Setup
 
 1. You'll see the setup page — create your admin email and password
-2. Add a **Provider** — any OpenAI-compatible API (e.g. `https://api.openai.com/v1`, or your self-hosted endpoint) with your API key
-3. Create an **API Key** — set rate limits and allowed models
-4. Share the generated `sk-share-...` key with your user
+2. Add a **Provider** — any OpenAI-compatible API (e.g. `https://api.openai.com/v1`, or your self-hosted endpoint) with your API key and available models
+3. Test the connection to verify your provider is accessible
+4. Create an **API Key** — set rate limits and allowed models
+5. Share the generated `sk-share-...` key with your user
 
 ### Using a Share Key
 
@@ -132,7 +133,9 @@ Set these environment variables in `docker-compose.yml`:
 |----------|---------|-------------|
 | `THROTL_PORT` | `8080` | Gateway server port (inside container) |
 | `THROTL_DB_URL` | `file:/data/throtl.db` | SQLite database file path |
-| `THROTL_JWT_SECRET` | auto-generated | JWT signing key. **Set this to a secure random string** — otherwise sessions invalidate on every restart |
+| `THROTL_JWT_SECRET` | auto-generated | JWT signing key. **MUST set to a secure random string in production** — otherwise sessions invalidate on every restart |
+
+**Production note:** The default `docker-compose.yml` includes a placeholder JWT secret. Always override this in production deployments.
 
 ---
 
@@ -154,13 +157,26 @@ docker compose down -v
 
 | Layer | Tech |
 |-------|------|
-| Backend | Go + Echo |
-| Frontend | React + Vite + Tailwind CSS |
-| Database | SQLite (WAL mode) |
+| Backend | Go 1.25 + Echo v4 |
+| Frontend | React 19 + Vite 8 + Tailwind v4 + shadcn/ui |
+| Database | SQLite (WAL mode, pure Go via modernc.org/sqlite) |
 | Auth | JWT + bcrypt |
+| Charts | Recharts v3 |
+
+---
+
+## Testing
+
+```bash
+# Backend tests
+cd backend && go test ./...
+
+# Frontend tests
+cd frontend && npm run test
+```
 
 ---
 
 ## License
 
-MIT — do whatever you want, just keep the license notice.
+Apache License 2.0 — see [LICENSE](LICENSE) for details.
