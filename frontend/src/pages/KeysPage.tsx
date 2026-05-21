@@ -46,11 +46,26 @@ export default function KeysPage() {
     loadKeys();
   };
 
-  const copyKey = (key: string) => {
-    navigator.clipboard.writeText(key);
-    setCopied(key);
-    toast({ title: "Copied to clipboard", variant: "success" });
-    setTimeout(() => setCopied(null), 2000);
+  const copyKey = async (key: string) => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(key);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = key;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
+      setCopied(key);
+      toast({ title: "Copied to clipboard", variant: "success" });
+      setTimeout(() => setCopied(null), 2000);
+    } catch {
+      toast({ title: "Failed to copy", variant: "destructive" });
+    }
   };
 
   if (loading) {

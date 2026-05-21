@@ -148,27 +148,31 @@ export default function ProvidersPage() {
   };
 
   const handleSave = async () => {
-    if (editingProvider) {
-      await api.updateProvider(editingProvider.id, {
-        name: formName,
-        type: formType,
-        base_url: formBaseURL,
-        api_key: realAPIKey || formAPIKey,
-        models: formModels,
-      });
-    } else {
-      await api.createProvider({
-        id: formID,
-        name: formName,
-        type: formType,
-        base_url: formBaseURL,
-        api_key: realAPIKey || formAPIKey,
-        models: formModels,
-      });
+    try {
+      if (editingProvider) {
+        await api.updateProvider(editingProvider.id, {
+          name: formName,
+          type: formType,
+          base_url: formBaseURL,
+          api_key: realAPIKey || formAPIKey,
+          models: formModels,
+        });
+      } else {
+        await api.createProvider({
+          id: formID,
+          name: formName,
+          type: formType,
+          base_url: formBaseURL,
+          api_key: realAPIKey || formAPIKey,
+          models: formModels,
+        });
+      }
+      resetForm();
+      setDialogOpen(false);
+      loadProviders();
+    } catch (err) {
+      toast({ title: editingProvider ? "Failed to update provider" : "Failed to create provider", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
     }
-    resetForm();
-    setDialogOpen(false);
-    loadProviders();
   };
 
   const resetForm = () => {

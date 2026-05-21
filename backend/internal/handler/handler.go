@@ -203,7 +203,7 @@ func (h *Handler) CreateProvider(c echo.Context) error {
 	}
 
 	// Mask API key before returning
-	p.APIKey = p.APIKey[:4] + "..." + p.APIKey[len(p.APIKey)-4:]
+	p.APIKey = maskKey(p.APIKey)
 	return c.JSON(http.StatusCreated, p)
 }
 
@@ -256,7 +256,7 @@ func (h *Handler) UpdateProvider(c echo.Context) error {
 		}
 	}
 
-	p.APIKey = p.APIKey[:4] + "..." + p.APIKey[len(p.APIKey)-4:]
+	p.APIKey = maskKey(p.APIKey)
 	return c.JSON(http.StatusOK, p)
 }
 
