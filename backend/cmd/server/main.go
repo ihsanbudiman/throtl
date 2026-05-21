@@ -90,6 +90,7 @@ func main() {
 	// --- Proxy API (consumer-facing, share-key auth) ---
 	proxyGroup := e.Group("/v1", middleware.KeyAuth(s), rl.Middleware())
 	proxyGroup.GET("/models", p.ListModels)
+	proxyGroup.POST("/responses", p.ResponsesHandler)
 	proxyGroup.POST("/messages", p.ProxyHandler)
 	proxyGroup.Any("/*", p.ProxyHandler)
 

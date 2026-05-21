@@ -530,13 +530,25 @@ func (h *Handler) ListModels(c echo.Context) error {
 		}
 
 		models = append(models, model.ModelEntry{
-			ID:                fmt.Sprintf("%s/%s", provider.ID, mo.ModelName),
-			Object:            "model",
-			Created:           mo.CreatedAt.Unix(),
-			OwnedBy:           provider.ID,
-			ProviderID:        provider.ID,
-			Active:            mo.Active,
-			RequestMultiplier: mo.RequestMultiplier,
+			ID:                      fmt.Sprintf("%s/%s", provider.ID, mo.ModelName),
+			Object:                  "model",
+			Created:                 mo.CreatedAt.Unix(),
+			OwnedBy:                 provider.ID,
+			ProviderID:              provider.ID,
+			Active:                  mo.Active,
+			RequestMultiplier:       mo.RequestMultiplier,
+			Slug:                    fmt.Sprintf("%s/%s", provider.ID, mo.ModelName),
+			DisplayName:             mo.ModelName,
+			Visibility:              "list",
+			SupportedInAPI:          true,
+			DefaultReasoningLevel:   "medium",
+			SupportedReasoningLevels: []map[string]interface{}{
+				{"effort": "low", "description": "Fast responses with lighter reasoning"},
+				{"effort": "medium", "description": "Balances speed and reasoning depth"},
+				{"effort": "high", "description": "Greater reasoning depth for complex problems"},
+			},
+			Description: "AI language model",
+			ShellType:   "shell_command",
 		})
 	}
 

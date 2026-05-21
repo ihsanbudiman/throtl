@@ -8,12 +8,20 @@ import (
 
 // ModelEntry represents a model in the gateway's unified model list.
 type ModelEntry struct {
-	ID                string `json:"id"`
-	Object            string `json:"object"`
-	Created           int64  `json:"created"`
-	OwnedBy           string `json:"owned_by"`
-	Active            bool   `json:"active"`
-	RequestMultiplier int    `json:"request_multiplier"`
+	ID                      string                   `json:"id"`
+	Object                  string                   `json:"object"`
+	Created                 int64                    `json:"created"`
+	OwnedBy                 string                   `json:"owned_by"`
+	Active                  bool                     `json:"active"`
+	RequestMultiplier       int                      `json:"request_multiplier"`
+	Slug                    string                   `json:"slug"`
+	DisplayName             string                   `json:"display_name"`
+	Visibility              string                   `json:"visibility"`
+	SupportedInAPI          bool                     `json:"supported_in_api"`
+	DefaultReasoningLevel  string                   `json:"default_reasoning_level"`
+	SupportedReasoningLevels []map[string]interface{} `json:"supported_reasoning_levels"`
+	Description             string                   `json:"description"`
+	ShellType               string                   `json:"shell_type"`
 }
 
 // UpstreamModel represents a raw model fetched from an upstream provider.

@@ -194,18 +194,31 @@ func (g *Gateway) ListModels(c echo.Context) error {
 		}
 
 		models = append(models, ModelEntry{
-			ID:                modelID,
-			Object:            "model",
-			Created:           mo.CreatedAt.Unix(),
-			OwnedBy:           provider.ID,
-			Active:            mo.Active,
-			RequestMultiplier: mo.RequestMultiplier,
+			ID:                      modelID,
+			Object:                  "model",
+			Created:                 mo.CreatedAt.Unix(),
+			OwnedBy:                 provider.ID,
+			Active:                  mo.Active,
+			RequestMultiplier:       mo.RequestMultiplier,
+			Slug:                    modelID,
+			DisplayName:             mo.ModelName,
+			Visibility:              "list",
+			SupportedInAPI:          true,
+			DefaultReasoningLevel:   "medium",
+			SupportedReasoningLevels: []map[string]interface{}{
+				{"effort": "low", "description": "Fast responses with lighter reasoning"},
+				{"effort": "medium", "description": "Balances speed and reasoning depth"},
+				{"effort": "high", "description": "Greater reasoning depth for complex problems"},
+			},
+			Description: "AI language model",
+			ShellType:   "shell_command",
 		})
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"object": "list",
 		"data":   models,
+		"models": models,
 	})
 }
 

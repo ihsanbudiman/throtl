@@ -32,20 +32,14 @@ func NewOpenAIAdapter(s *store.Store) *OpenAIAdapter {
 func (a *OpenAIAdapter) ProxyChat(c echo.Context, provider *model.Provider, body []byte, actualModel string, reqModel string, keyID string) error {
 	start := time.Now()
 
-	newBody := strings.Replace(string(body), `"model":"`+reqModel+`"`, `"model":"`+actualModel+`"`, 1)
-	newBody = strings.Replace(newBody, `"model": "`+reqModel+`"`, `"model": "`+actualModel+`"`, 1)
-
-	if strings.Contains(newBody, `"stream":true`) || strings.Contains(newBody, `"stream": true`) {
-		if !strings.Contains(newBody, `"stream_options"`) {
-			newBody = strings.Replace(newBody, `"stream":true`, `"stream":true,"stream_options":{"include_usage":true}`, 1)
-			newBody = strings.Replace(newBody, `"stream": true`, `"stream": true,"stream_options":{"include_usage":true}`, 1)
-		}
-	}
-	body = []byte(newBody)
+	// Normalize base URL: remove trailing /v1 or /v1/ to avoid double /v1 in endpoint path
+	baseURL := strings.TrimRight(provider.BaseURL, "/")
+	baseURL = strings.TrimSuffix(baseURL, "/v1")
+	baseURL = strings.TrimRight(baseURL, "/")
 
 	upstreamPath := c.Request().URL.Path
 	upstreamPath = strings.TrimPrefix(upstreamPath, "/v1")
-	upstreamURL := strings.TrimRight(provider.BaseURL, "/") + upstreamPath
+	upstreamURL := baseURL + "/v1" + upstreamPath
 	if c.Request().URL.RawQuery != "" {
 		upstreamURL += "?" + c.Request().URL.RawQuery
 	}
@@ -210,6 +204,18 @@ func (a *OpenAIAdapter) ListModels(c echo.Context, provider *model.Provider, dis
 			Object:  "model",
 			Created: m.Created,
 			OwnedBy: provider.ID,
+			Slug:    prefixedID,
+			DisplayName: m.ID,
+			Visibility: "list",
+			SupportedInAPI: true,
+			DefaultReasoningLevel: "medium",
+			SupportedReasoningLevels: []map[string]interface{}{
+				{"effort": "low", "description": "Fast responses with lighter reasoning"},
+				{"effort": "medium", "description": "Balances speed and reasoning depth"},
+				{"effort": "high", "description": "Greater reasoning depth for complex problems"},
+			},
+			Description: "AI language model",
+			ShellType:   "shell_command",
 		})
 	}
 	return entries, nil

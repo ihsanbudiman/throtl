@@ -633,6 +633,18 @@ func (a *AnthropicAdapter) ListModels(c echo.Context, provider *model.Provider, 
 			Object:  "model",
 			Created: m.Created,
 			OwnedBy: provider.ID,
+			Slug:    prefixedID,
+			DisplayName: m.ID,
+			Visibility: "list",
+			SupportedInAPI: true,
+			DefaultReasoningLevel: "medium",
+			SupportedReasoningLevels: []map[string]interface{}{
+				{"effort": "low", "description": "Fast responses with lighter reasoning"},
+				{"effort": "medium", "description": "Balances speed and reasoning depth"},
+				{"effort": "high", "description": "Greater reasoning depth for complex problems"},
+			},
+			Description: "AI language model",
+			ShellType:   "shell_command",
 		})
 	}
 	return entries, nil
