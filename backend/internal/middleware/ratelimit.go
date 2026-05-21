@@ -19,19 +19,20 @@ func NewRateLimiter(s *store.Store) *RateLimiter {
 func (rl *RateLimiter) Check(keyID string, dailyLimit int) (bool, int, string, int) {
 	now := time.Now()
 
+	// --- Daily reset (always check, even if dailyLimit == 0) ---
+	today := now.UTC().Format("2006-01-02")
+	dailyDate, dailyCount, err := rl.store.GetDailyCount(keyID)
+	if err != nil {
+		return true, 0, "", 0
+	}
+
+	if dailyDate != today {
+		rl.store.ResetDailyCount(keyID, today)
+		dailyCount = 0
+	}
+
 	// --- Daily limit check (resets at 00:00 UTC) ---
 	if dailyLimit > 0 {
-		today := now.UTC().Format("2006-01-02")
-		dailyDate, dailyCount, err := rl.store.GetDailyCount(keyID)
-		if err != nil {
-			return true, 0, "", 0
-		}
-
-		if dailyDate != today {
-			rl.store.ResetDailyCount(keyID, today)
-			dailyCount = 0
-		}
-
 		if dailyCount >= dailyLimit {
 			tomorrow := time.Date(now.UTC().Year(), now.UTC().Month(), now.UTC().Day()+1, 0, 0, 0, 0, time.UTC)
 			retryAfter := int(tomorrow.Sub(now).Seconds())
@@ -79,8 +80,13 @@ func (rl *RateLimiter) GetStatus(keyID string) KeyRateLimitStatus {
 			dailyCount = 0
 		}
 		status.DailyCount = dailyCount
-		status.DailyTokensInCount = key.TokensInDailyCount
-		status.DailyTokensOutCount = key.TokensOutDailyCount
+		if dailyDate != today {
+			status.DailyTokensInCount = 0
+			status.DailyTokensOutCount = 0
+		} else {
+			status.DailyTokensInCount = key.TokensInDailyCount
+			status.DailyTokensOutCount = key.TokensOutDailyCount
+		}
 
 		tomorrow := time.Date(now.UTC().Year(), now.UTC().Month(), now.UTC().Day()+1, 0, 0, 0, 0, time.UTC)
 		status.DailyReset = &tomorrow
