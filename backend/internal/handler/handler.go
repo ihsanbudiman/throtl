@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -475,7 +476,15 @@ func (h *Handler) GetStats(c echo.Context) error {
 }
 
 func (h *Handler) GetUsageLogs(c echo.Context) error {
-	logs, err := h.store.GetRecentLogs(50)
+	daysStr := c.QueryParam("days")
+	days := 30
+	if daysStr != "" {
+		if d, err := strconv.Atoi(daysStr); err == nil && d > 0 && d <= 365 {
+			days = d
+		}
+	}
+	startDate := time.Now().AddDate(0, 0, -days)
+	logs, err := h.store.GetLogsByDateRange(startDate)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}

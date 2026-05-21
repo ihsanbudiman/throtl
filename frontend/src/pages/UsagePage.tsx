@@ -3,7 +3,7 @@ import { api, type APIKey, type UsageLog } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Activity, Clock, ArrowDownToLine, ArrowUpFromLine, BarChart3, Filter, ChevronDown } from "lucide-react";
+import { Activity, Clock, ArrowDownToLine, ArrowUpFromLine, BarChart3, Filter, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 
 function formatTime(ms: number): string {
@@ -30,18 +30,7 @@ function latencyColor(ms: number): string {
 
 type DateRange = "today" | "7d" | "30d";
 
-function getDateCutoff(range: DateRange): Date {
-  const now = new Date();
-  const cutoff = new Date(now);
-  if (range === "today") {
-    cutoff.setHours(0, 0, 0, 0);
-  } else if (range === "7d") {
-    cutoff.setDate(now.getDate() - 7);
-  } else {
-    cutoff.setDate(now.getDate() - 30);
-  }
-  return cutoff;
-}
+const dateRangeDaysMap: Record<DateRange, number> = { today: 1, "7d": 7, "30d": 30 };
 
 function aggregateByDay(logs: UsageLog[]): Array<{ date: string; requests: number; tokensIn: number; tokensOut: number }> {
   const map = new Map<string, { requests: number; tokensIn: number; tokensOut: number }>();
@@ -63,18 +52,20 @@ export default function UsagePage() {
   const [logs, setLogs] = useState<UsageLog[]>([]);
   const [keys, setKeys] = useState<APIKey[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dateRange, setDateRange] = useState<DateRange>("7d");
+  const [dateRange, setDateRange] = useState<DateRange>("30d");
   const [selectedKey, setSelectedKey] = useState<string>("all");
   const [keyMenuOpen, setKeyMenuOpen] = useState(false);
   const keyMenuRef = useRef<HTMLDivElement>(null);
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
 
   useEffect(() => {
-    Promise.all([api.getUsageLogs(), api.listKeys()]).then(([l, k]) => {
+    Promise.all([api.getUsageLogs(dateRangeDaysMap[dateRange]), api.listKeys()]).then(([l, k]) => {
       setLogs(l || []);
       setKeys(k || []);
       setLoading(false);
     });
-  }, []);
+  }, [dateRange]);
 
   useEffect(() => {
     if (!keyMenuOpen) return;
@@ -88,13 +79,20 @@ export default function UsagePage() {
   }, [keyMenuOpen]);
 
   const filteredLogs = useMemo(() => {
-    const cutoff = getDateCutoff(dateRange);
     return logs.filter((log) => {
-      if (new Date(log.created_at) < cutoff) return false;
       if (selectedKey !== "all" && log.api_key_id !== selectedKey) return false;
       return true;
     });
-  }, [logs, dateRange, selectedKey]);
+  }, [logs, selectedKey]);
+
+  const paginatedLogs = useMemo(() => {
+    const total = Math.ceil(filteredLogs.length / pageSize);
+    const p = Math.min(page, Math.max(1, total));
+    const start = (p - 1) * pageSize;
+    return filteredLogs.slice(start, start + pageSize);
+  }, [filteredLogs, page]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / pageSize));
 
   const chartData = useMemo(() => aggregateByDay(filteredLogs), [filteredLogs]);
 
@@ -319,7 +317,7 @@ export default function UsagePage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredLogs.map((log) => (
+                    {paginatedLogs.map((log) => (
                       <TableRow key={log.id} className="transition-colors duration-150 hover:bg-accent/30">
                         <TableCell className="text-sm text-muted-foreground">
                           <div className="flex items-center gap-1.5">
@@ -358,7 +356,7 @@ export default function UsagePage() {
               </div>
               {/* Mobile cards */}
               <div className="sm:hidden space-y-3 p-4">
-                {filteredLogs.map((log) => (
+                {paginatedLogs.map((log) => (
                   <div key={log.id} className="rounded-[8px] border border-border/60 bg-card p-4 space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -380,6 +378,52 @@ export default function UsagePage() {
                 ))}
               </div>
             </>
+          )}
+
+          {/* Pagination */}
+          {filteredLogs.length > pageSize && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-border/60">
+              <span className="text-xs text-muted-foreground">
+                Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filteredLogs.length)} of {filteredLogs.length}
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="p-1.5 rounded-[8px] border border-border/60 disabled:opacity-30 hover:bg-accent/30 transition-colors"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum = i + 1;
+                  if (totalPages > 5) {
+                    if (page <= 3) pageNum = i + 1;
+                    else if (page >= totalPages - 2) pageNum = totalPages - 4 + i;
+                    else pageNum = page - 2 + i;
+                  }
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => setPage(pageNum)}
+                      className={`w-8 h-8 text-xs rounded-[8px] transition-colors ${
+                        page === pageNum
+                          ? "bg-primary/15 text-primary font-medium"
+                          : "text-muted-foreground hover:bg-accent/30"
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="p-1.5 rounded-[8px] border border-border/60 disabled:opacity-30 hover:bg-accent/30 transition-colors"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>

@@ -280,6 +280,27 @@ func (s *Store) GetRecentLogs(limit int) ([]model.UsageLog, error) {
 	return result, nil
 }
 
+func (s *Store) GetLogsByDateRange(startDate time.Time) ([]model.UsageLog, error) {
+	rows, err := s.db.Query(`SELECT id, api_key_id, provider, model, status, tokens_in, tokens_out, latency_ms, created_at
+		FROM usage_logs WHERE created_at >= ? ORDER BY created_at DESC`, startDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make([]model.UsageLog, 0)
+	for rows.Next() {
+		var l model.UsageLog
+		if err := rows.Scan(&l.ID, &l.APIKeyID, &l.Provider, &l.Model, &l.Status, &l.TokensIn, &l.TokensOut, &l.LatencyMs, &l.CreatedAt); err != nil {
+			return nil, err
+		}
+		result = append(result, l)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 func (s *Store) GetDashboardStats() (*model.DashboardStats, error) {
 	stats := &model.DashboardStats{}
 

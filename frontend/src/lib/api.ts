@@ -156,7 +156,10 @@ export const api = {
 
   // Stats
   getStats: () => request<DashboardStats>("/api/stats"),
-  getUsageLogs: () => request<UsageLog[]>("/api/usage"),
+  getUsageLogs: (days?: number) => {
+    if (days) return request<UsageLog[]>(`/api/usage?days=${days}`);
+    return request<UsageLog[]>("/api/usage");
+  },
 
   // Providers
   listProviders: () => request<Provider[]>("/api/providers"),
