@@ -37,6 +37,9 @@ func (a *OpenAIAdapter) ProxyChat(c echo.Context, provider *model.Provider, body
 	baseURL = strings.TrimSuffix(baseURL, "/v1")
 	baseURL = strings.TrimRight(baseURL, "/")
 
+	// Inject stream_options so upstream includes usage data in the stream
+	body = injectStreamUsage(body)
+
 	upstreamPath := c.Request().URL.Path
 	upstreamPath = strings.TrimPrefix(upstreamPath, "/v1")
 	upstreamURL := baseURL + "/v1" + upstreamPath

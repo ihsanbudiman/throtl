@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -309,4 +310,23 @@ func extractIntField(s, field string) int {
 		result = result*10 + int(val[i]-'0')
 	}
 	return result
+}
+
+// injectStreamUsage adds "stream_options":{"include_usage":true} to a streaming
+// request body so the upstream provider includes token usage in the final chunk.
+func injectStreamUsage(body []byte) []byte {
+	var req map[string]interface{}
+	if err := json.Unmarshal(body, &req); err != nil {
+		return body
+	}
+	stream, _ := req["stream"].(bool)
+	if !stream {
+		return body
+	}
+	req["stream_options"] = map[string]interface{}{"include_usage": true}
+	updated, err := json.Marshal(req)
+	if err != nil {
+		return body
+	}
+	return updated
 }

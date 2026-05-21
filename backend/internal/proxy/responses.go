@@ -299,6 +299,10 @@ func convertResponsesToChatCompletions(body []byte, actualModel string) []byte {
 		}
 	}
 
+	if stream, _ := req["stream"].(bool); stream {
+		chat["stream_options"] = map[string]interface{}{"include_usage": true}
+	}
+
 	if toolsRaw, ok := req["tools"].([]interface{}); ok {
 		var chatTools []interface{}
 		for _, tRaw := range toolsRaw {
