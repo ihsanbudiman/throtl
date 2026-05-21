@@ -11,6 +11,11 @@ function formatTime(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
+function formatLocalDateTime(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleString();
+}
+
 function statusVariant(status: number): "default" | "secondary" | "destructive" {
   if (status >= 200 && status < 300) return "default";
   if (status >= 400 && status < 500) return "secondary";
@@ -41,7 +46,8 @@ function getDateCutoff(range: DateRange): Date {
 function aggregateByDay(logs: UsageLog[]): Array<{ date: string; requests: number; tokensIn: number; tokensOut: number }> {
   const map = new Map<string, { requests: number; tokensIn: number; tokensOut: number }>();
   for (const log of logs) {
-    const day = new Date(log.created_at).toISOString().slice(0, 10);
+    const d = new Date(log.created_at);
+    const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     const entry = map.get(day) || { requests: 0, tokensIn: 0, tokensOut: 0 };
     entry.requests++;
     entry.tokensIn += log.tokens_in;
@@ -318,7 +324,7 @@ export default function UsagePage() {
                         <TableCell className="text-sm text-muted-foreground">
                           <div className="flex items-center gap-1.5">
                             <Clock className="h-3.5 w-3.5 text-muted-foreground/60" />
-                            {new Date(log.created_at).toLocaleDateString()} {new Date(log.created_at).toLocaleTimeString()}
+                            {formatLocalDateTime(log.created_at)}
                           </div>
                         </TableCell>
                         <TableCell><Badge variant="secondary" className="text-xs border-border/50">{log.provider}</Badge></TableCell>
@@ -357,7 +363,7 @@ export default function UsagePage() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                         <Clock className="h-3.5 w-3.5" />
-                        {new Date(log.created_at).toLocaleDateString()} {new Date(log.created_at).toLocaleTimeString()}
+                        {formatLocalDateTime(log.created_at)}
                       </div>
                       <Badge variant={statusVariant(log.status)} className={`text-xs ${statusVariant(log.status) === "default" ? "bg-chart-2/15 text-chart-2" : statusVariant(log.status) === "secondary" ? "bg-chart-4/15 text-chart-4" : ""}`}>{log.status}</Badge>
                     </div>
