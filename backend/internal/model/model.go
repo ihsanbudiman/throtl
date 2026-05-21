@@ -148,21 +148,35 @@ type ModelOverride struct {
 }
 
 type ModelEntry struct {
-	ID                      string                   `json:"id"`
-	Object                  string                   `json:"object"`
-	Created                 int64                    `json:"created"`
-	OwnedBy                 string                   `json:"owned_by"`
-	ProviderID              string                   `json:"provider_id"`
-	Active                  bool                     `json:"active"`
-	RequestMultiplier       int                      `json:"request_multiplier"`
-	Slug                    string                   `json:"slug"`
-	DisplayName             string                   `json:"display_name"`
-	Visibility              string                   `json:"visibility"`
-	SupportedInAPI          bool                     `json:"supported_in_api"`
-	DefaultReasoningLevel  string                   `json:"default_reasoning_level"`
-	SupportedReasoningLevels []map[string]interface{} `json:"supported_reasoning_levels"`
-	Description             string                   `json:"description"`
-	ShellType               string                   `json:"shell_type"`
+	ID                        string                   `json:"id"`
+	Object                    string                   `json:"object"`
+	Created                   int64                    `json:"created"`
+	OwnedBy                   string                   `json:"owned_by"`
+	ProviderID                string                   `json:"provider_id"`
+	Active                    bool                     `json:"active"`
+	RequestMultiplier         int                      `json:"request_multiplier"`
+	Slug                      string                   `json:"slug"`
+	DisplayName               string                   `json:"display_name"`
+	Visibility                string                   `json:"visibility"`
+	SupportedInAPI            bool                     `json:"supported_in_api"`
+	DefaultReasoningLevel     string                   `json:"default_reasoning_level"`
+	SupportedReasoningLevels  []map[string]interface{} `json:"supported_reasoning_levels"`
+	Description               string                   `json:"description"`
+	ShellType                 string                   `json:"shell_type"`
+	Priority                  int                      `json:"priority"`
+	BaseInstructions          string                   `json:"base_instructions"`
+	SupportsReasoningSummaries bool                    `json:"supports_reasoning_summaries"`
+	SupportVerbosity          bool                     `json:"support_verbosity"`
+	DefaultVerbosity          interface{}              `json:"default_verbosity"`
+	ApplyPatchToolType        interface{}              `json:"apply_patch_tool_type"`
+	TruncationPolicy          map[string]interface{}   `json:"truncation_policy"`
+	SupportsParallelToolCalls bool                     `json:"supports_parallel_tool_calls"`
+	SupportsImageDetailOriginal bool                   `json:"supports_image_detail_original"`
+	ContextWindow             int                      `json:"context_window"`
+	ExperimentalSupportedTools []interface{}            `json:"experimental_supported_tools"`
+	InputModalities            []string                 `json:"input_modalities"`
+	SupportsSearchTool        bool                     `json:"supports_search_tool"`
+	Upgrade                   interface{}              `json:"upgrade"`
 }
 
 type UpdateModelOverrideRequest struct {

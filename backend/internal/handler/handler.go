@@ -549,6 +549,15 @@ func (h *Handler) ListModels(c echo.Context) error {
 			},
 			Description: "AI language model",
 			ShellType:   "shell_command",
+			Priority:    1,
+			TruncationPolicy: map[string]interface{}{
+				"mode":  "bytes",
+				"limit": 10000,
+			},
+			SupportsParallelToolCalls: true,
+			ContextWindow:             128000,
+			ExperimentalSupportedTools: []interface{}{},
+			InputModalities:            []string{"text", "image"},
 		})
 	}
 
