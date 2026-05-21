@@ -1,4 +1,4 @@
-import { type LucideIcon, LayoutDashboard, KeyRound, Server, Activity, LogOut, Cpu, Menu, X, Sun, Moon } from "lucide-react";
+import { type LucideIcon, LayoutDashboard, KeyRound, Server, Activity, LogOut, Cpu, Menu, X, Sun, Moon, BookOpen } from "lucide-react";
 import ThrotlIcon from "@/assets/throtl-icon.svg";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
-export type Page = "overview" | "keys" | "providers" | "models" | "usage";
+export type Page = "overview" | "keys" | "providers" | "models" | "usage" | "documentation";
 
 interface NavItem {
   id: Page;
@@ -21,6 +21,7 @@ const nav: NavItem[] = [
   { id: "providers", label: "Providers", icon: Server },
   { id: "models", label: "Models", icon: Cpu },
   { id: "usage", label: "Usage", icon: Activity },
+  { id: "documentation", label: "Documentation", icon: BookOpen },
 ];
 
 interface SidebarProps {

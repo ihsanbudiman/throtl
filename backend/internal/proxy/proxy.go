@@ -1,13 +1,16 @@
 package proxy
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/ihsanbudiman/throtl/internal/model"
 	"github.com/ihsanbudiman/throtl/internal/store"
 	"github.com/labstack/echo/v4"
@@ -126,17 +129,195 @@ func (g *Gateway) ProxyHandler(c echo.Context) error {
 	}
 
 	adapter := NewAdapter(provider.Type, g.store)
-	if err := adapter.ProxyChat(c, provider, body, actualModel, reqModel, keyID); err != nil {
-		return err
+	start := time.Now()
+
+	wantsAnthropicResponse := c.Get("throtl_response_format") == "anthropic"
+
+	resp, err := DefaultRetryConfig.retryWithBackoff(c.Request().Context(), func() (*ProxyResponse, error) {
+		return adapter.DoUpstream(c.Request().Context(), provider, body, actualModel, wantsAnthropicResponse)
+	})
+	if err != nil {
+		log.Printf("Upstream request failed after retries: %v", err)
+		return c.JSON(http.StatusBadGateway, map[string]interface{}{
+			"error": map[string]string{"message": "Upstream provider error"},
+		})
+	}
+	defer resp.Raw.Body.Close()
+
+	isStream := strings.Contains(resp.Raw.Header.Get("Content-Type"), "text/event-stream")
+
+	if !wantsAnthropicResponse && !isStream && provider.Type == "anthropic" && resp.Raw.StatusCode < 400 {
+		rawBody, readErr := io.ReadAll(resp.Raw.Body)
+		if readErr == nil {
+			transformed := AnthropicToOpenAIResponse(rawBody)
+			if transformed != nil {
+				resp.Raw.Body = io.NopCloser(bytes.NewReader(transformed))
+				resp.Raw.Header.Set("Content-Type", "application/json")
+			}
+		}
 	}
 
-	// Apply request multiplier correction after successful proxy
+	for k, vs := range resp.Raw.Header {
+		for _, v := range vs {
+			c.Response().Header().Add(k, v)
+		}
+	}
+
+	if isStream {
+		if provider.Type == "anthropic" && !wantsAnthropicResponse {
+			return g.handleAnthropicStream(c, resp, provider, reqModel, keyID, start, actualModel)
+		}
+		return g.handleGenericStream(c, resp, provider, reqModel, keyID, start, wantsAnthropicResponse)
+	}
+
+	respBody, err := io.ReadAll(resp.Raw.Body)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": map[string]string{"message": "Failed to read upstream response"},
+		})
+	}
+
+	go func() {
+		var tokensIn, tokensOut int
+		if wantsAnthropicResponse && provider.Type == "anthropic" {
+			tokensIn, tokensOut = ExtractAnthropicTokens(respBody)
+		} else {
+			tokensIn, tokensOut = extractTokens(respBody)
+		}
+		if tokensIn > 0 || tokensOut > 0 {
+			if err := g.store.IncrementTokenCount(keyID, tokensIn, tokensOut); err != nil {
+				log.Printf("Failed to increment token count: %v", err)
+			}
+		}
+		latency := int(time.Since(start).Milliseconds())
+		usageLog := &model.UsageLog{
+			ID:        uuid.New().String(),
+			APIKeyID:  keyID,
+			Provider:  provider.Name,
+			Model:     reqModel,
+			Status:    resp.Raw.StatusCode,
+			TokensIn:  tokensIn,
+			TokensOut: tokensOut,
+			LatencyMs: latency,
+			CreatedAt: time.Now(),
+		}
+		if err := g.store.CreateUsageLog(usageLog); err != nil {
+			log.Printf("Failed to log usage: %v", err)
+		}
+		_ = g.store.UpdateLastUsed(keyID)
+	}()
+
 	if mult, ok := c.Get("throtl_request_multiplier").(int); ok && mult > 1 {
 		if err := g.store.IncrementDailyCountBy(keyID, mult-1); err != nil {
 			log.Printf("Failed to apply request multiplier: %v", err)
 		}
 	}
 
+	return c.Blob(resp.Raw.StatusCode, resp.Raw.Header.Get("Content-Type"), respBody)
+}
+
+func (g *Gateway) handleAnthropicStream(c echo.Context, resp *ProxyResponse, provider *model.Provider, reqModel string, keyID string, start time.Time, actualModel string) error {
+	respID := "chatcmpl-" + uuid.New().String()[:8]
+
+	c.Response().Header().Set("Content-Type", "text/event-stream")
+	c.Response().Header().Set("Cache-Control", "no-cache")
+	c.Response().Header().Set("Connection", "keep-alive")
+	c.Response().WriteHeader(resp.Raw.StatusCode)
+	c.Response().Flush()
+
+	flusher, canFlush := c.Response().Writer.(http.Flusher)
+
+	tokensIn, tokensOut := streamAnthropicToOpenAI(resp.Raw.Body, c, respID, actualModel, canFlush, flusher)
+
+	go func() {
+		if tokensIn > 0 || tokensOut > 0 {
+			if err := g.store.IncrementTokenCount(keyID, tokensIn, tokensOut); err != nil {
+				log.Printf("Failed to increment token count: %v", err)
+			}
+		}
+		latency := int(time.Since(start).Milliseconds())
+		usageLog := &model.UsageLog{
+			ID:        uuid.New().String(),
+			APIKeyID:  keyID,
+			Provider:  provider.Name,
+			Model:     reqModel,
+			Status:    resp.Raw.StatusCode,
+			TokensIn:  tokensIn,
+			TokensOut: tokensOut,
+			LatencyMs: latency,
+			CreatedAt: time.Now(),
+		}
+		if err := g.store.CreateUsageLog(usageLog); err != nil {
+			log.Printf("Failed to log usage: %v", err)
+		}
+		_ = g.store.UpdateLastUsed(keyID)
+	}()
+
+	if mult, ok := c.Get("throtl_request_multiplier").(int); ok && mult > 1 {
+		if err := g.store.IncrementDailyCountBy(keyID, mult-1); err != nil {
+			log.Printf("Failed to apply request multiplier: %v", err)
+		}
+	}
+	return nil
+}
+
+func (g *Gateway) handleGenericStream(c echo.Context, resp *ProxyResponse, provider *model.Provider, reqModel string, keyID string, start time.Time, wantsAnthropicResponse bool) error {
+	c.Response().WriteHeader(resp.Raw.StatusCode)
+	c.Response().Flush()
+
+	flusher, canFlush := c.Response().Writer.(http.Flusher)
+	var streamBuf strings.Builder
+	buf := make([]byte, 4096)
+	for {
+		n, readErr := resp.Raw.Body.Read(buf)
+		if n > 0 {
+			c.Response().Writer.Write(buf[:n])
+			streamBuf.Write(buf[:n])
+			if canFlush {
+				flusher.Flush()
+			}
+		}
+		if readErr != nil {
+			break
+		}
+	}
+
+	streamData := streamBuf.String()
+	go func() {
+		var tokensIn, tokensOut int
+		if wantsAnthropicResponse {
+			tokensIn, tokensOut = extractAnthropicStreamTokensPassthrough(streamData)
+		} else {
+			tokensIn, tokensOut = extractStreamTokens(streamData)
+		}
+		if tokensIn > 0 || tokensOut > 0 {
+			if err := g.store.IncrementTokenCount(keyID, tokensIn, tokensOut); err != nil {
+				log.Printf("Failed to increment token count: %v", err)
+			}
+		}
+		latency := int(time.Since(start).Milliseconds())
+		usageLog := &model.UsageLog{
+			ID:        uuid.New().String(),
+			APIKeyID:  keyID,
+			Provider:  provider.Name,
+			Model:     reqModel,
+			Status:    resp.Raw.StatusCode,
+			TokensIn:  tokensIn,
+			TokensOut: tokensOut,
+			LatencyMs: latency,
+			CreatedAt: time.Now(),
+		}
+		if err := g.store.CreateUsageLog(usageLog); err != nil {
+			log.Printf("Failed to log usage: %v", err)
+		}
+		_ = g.store.UpdateLastUsed(keyID)
+	}()
+
+	if mult, ok := c.Get("throtl_request_multiplier").(int); ok && mult > 1 {
+		if err := g.store.IncrementDailyCountBy(keyID, mult-1); err != nil {
+			log.Printf("Failed to apply request multiplier: %v", err)
+		}
+	}
 	return nil
 }
 

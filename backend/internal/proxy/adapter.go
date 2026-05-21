@@ -1,10 +1,104 @@
 package proxy
 
 import (
+	"context"
+	"fmt"
+	"net/http"
+	"time"
+
 	"github.com/ihsanbudiman/throtl/internal/model"
 	"github.com/ihsanbudiman/throtl/internal/store"
 	"github.com/labstack/echo/v4"
 )
+
+// ProxyResponse contains the complete upstream response data.
+// Used by DoUpstream so the caller can retry before writing to client.
+type ProxyResponse struct {
+	Raw *http.Response
+}
+
+// RetryConfig configures automatic retry behavior for upstream requests.
+type RetryConfig struct {
+	MaxRetries int
+	BaseDelay  time.Duration
+}
+
+var DefaultRetryConfig = RetryConfig{
+	MaxRetries: 3,
+	BaseDelay:  time.Second,
+}
+
+// IsRetryableError returns true if the status code or error warrants a retry.
+func IsRetryableError(statusCode int, err error) bool {
+	if err != nil {
+		return true
+	}
+	if statusCode == http.StatusTooManyRequests {
+		return true
+	}
+	if statusCode >= 500 && statusCode <= 599 && statusCode != 501 && statusCode != 505 {
+		return true
+	}
+	return false
+}
+
+func (rc RetryConfig) retryWithBackoff(ctx context.Context, fn func() (*ProxyResponse, error)) (*ProxyResponse, error) {
+	var lastResp *ProxyResponse
+	var lastErr error
+
+	for attempt := 0; attempt <= rc.MaxRetries; attempt++ {
+		resp, err := fn()
+		lastResp = resp
+		lastErr = err
+
+		if resp.Raw != nil && !IsRetryableError(resp.Raw.StatusCode, err) {
+			return resp, err
+		}
+
+		if resp.Raw != nil {
+			resp.Raw.Body.Close()
+		}
+
+		if attempt == rc.MaxRetries {
+			break
+		}
+
+		delay := rc.BaseDelay * (1 << uint(attempt))
+		if delay > 30*time.Second {
+			delay = 30 * time.Second
+		}
+
+		if resp.Raw != nil {
+			if retryAfter := resp.Raw.Header.Get("Retry-After"); retryAfter != "" {
+				if n := parseRetryAfter(retryAfter); n > delay {
+					delay = n
+				}
+			}
+		}
+
+		select {
+		case <-time.After(delay):
+		case <-ctx.Done():
+			return lastResp, ctx.Err()
+		}
+	}
+
+	return lastResp, lastErr
+}
+
+func parseRetryAfter(value string) time.Duration {
+	var seconds int
+	if _, err := fmt.Sscanf(value, "%d", &seconds); err == nil && seconds > 0 {
+		return time.Duration(seconds) * time.Second
+	}
+	if t, err := http.ParseTime(value); err == nil {
+		delay := time.Until(t)
+		if delay > 0 {
+			return delay
+		}
+	}
+	return 0
+}
 
 // ModelEntry represents a model in the gateway's unified model list.
 type ModelEntry struct {
@@ -47,7 +141,7 @@ type UpstreamModel struct {
 
 // ProviderAdapter is the interface that each provider type must implement.
 type ProviderAdapter interface {
-	ProxyChat(c echo.Context, provider *model.Provider, body []byte, actualModel string, reqModel string, keyID string) error
+	DoUpstream(ctx context.Context, provider *model.Provider, body []byte, actualModel string, wantsAnthropicResponse bool) (*ProxyResponse, error)
 	ListModels(c echo.Context, provider *model.Provider, disabledSet map[string]bool, allowedSet map[string]bool) ([]ModelEntry, error)
 	FetchModels(provider *model.Provider) ([]UpstreamModel, error)
 }

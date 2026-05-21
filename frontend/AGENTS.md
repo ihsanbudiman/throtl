@@ -45,7 +45,7 @@ src/
 - **Radius**: single `--radius: 8px` everywhere
 - **Animations**: `pulse-dot`, `fade-in-up`, `shimmer`, `skeleton`, `fade-in-stagger` (cascading children)
 - **Fonts**: Inter (variable), Geist Mono (variable)
-- **API client**: `api` object with methods: `checkSetup`, `setup`, `login`, `getMe`, `getStats`, `getUsageLogs`, `listProviders`, `createProvider`, `deleteProvider`, `listKeys`, `createKey`, `toggleKey`, `deleteKey`, `listModels`, `toggleModel`, `updateModel`
+- **API client**: `api` object with methods: `checkSetup`, `setup`, `login`, `getMe`, `getStats`, `getUsageLogs`, `listProviders`, `createProvider`, `updateProvider`, `deleteProvider`, `testProviderConnection`, `listKeys`, `createKey`, `toggleKey`, `deleteKey`, `resetKeyLimit`, `listModels`, `toggleModel`, `updateModel`
 - **Key deps**: React Router v7, `@base-ui/react` v1, recharts v3.8.1, lucide-react
 - **Vite proxy**: `/api` + `/v1` → `localhost:8080`
 - **ESLint**: flat config (ESLint 10), typescript-eslint recommended, react-hooks, react-refresh

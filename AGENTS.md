@@ -1,7 +1,7 @@
 # PROJECT KNOWLEDGE BASE
 
-**Generated:** 2026-05-20
-**Commit:** 1acb102
+**Generated:** 2026-05-21
+**Commit:** 63ef82e
 **Branch:** main
 
 ## OVERVIEW
@@ -24,9 +24,10 @@ throtl/
 | Add frontend page | `frontend/src/pages/` + register in `App.tsx` + add to `Sidebar.tsx` | Lazy-loaded via React.lazy() |
 | Add API call | `frontend/src/lib/api.ts` | Single fetch wrapper, all endpoints |
 | Change design tokens | `frontend/src/index.css` @theme block | Tailwind v4 CSS-based config, no tailwind.config.js |
-| Change rate limit logic | `backend/internal/middleware/ratelimit.go` | Window + daily dual limits |
-| Change proxy/streaming | `backend/internal/proxy/` | Anthropic↔OpenAI stream transforms |
+| Change rate limit logic | `backend/internal/middleware/ratelimit.go` | Triple limits: rolling window + daily requests + daily token in/out |
+| Change proxy/streaming | `backend/internal/proxy/` | Anthropic↔OpenAI stream transforms, responses.go (747 lines) for OpenAI Responses API |
 | Add chart/widget | `frontend/src/pages/UsagePage.tsx` | Recharts, stacked bar charts, custom dropdowns |
+| Change token limits | `backend/internal/middleware/ratelimit.go` | Token in/out daily limits added to rate limiter context |
 
 ## CONVENTIONS
 - **Go**: Standard `cmd/` + `internal/` layout. Single binary. `CGO_ENABLED=0` static build.
@@ -40,7 +41,7 @@ throtl/
 - **Default JWT secret** in docker-compose — MUST override in production
 - **Backend .dockerignore has `shareai-server`** — naming remnant from rename, harmless but inconsistent
 - **Error swallowing** — 72+ `_ =` blank identifiers in Go code silently discard errors
-- **God files** — handler.go (592), store.go (479), anthropic.go (654), transform.go (585)
+- **God files** — responses.go (747), anthropic.go (698), handler.go (613), transform.go (585), store.go (488)
 - **No DB transactions** — store does individual queries, no BEGIN/COMMIT blocks
 
 ## UNIQUE STYLES
@@ -79,7 +80,7 @@ cd backend && go test ./...
 ```
 
 ## TESTS
-- **Backend**: 4 `_test.go` files — `ratelimit_test.go` (270 lines), `handler_test.go`, `store_test.go`, `store_token_test.go`
+- **Backend**: 4 `_test.go` files — `ratelimit_test.go` (270 lines), `handler_test.go`, `store_test.go`, `store_token_test.go` (9 tests for token limits)
 - **Frontend**: 3 `.test.tsx` files — `KeysPage.test.tsx`, `GenerateKeyDialog.test.tsx`, `setup.test.ts`
 - **Config**: Vitest (jsdom, globals), `frontend/src/test/setup.ts` imports `@testing-library/jest-dom`
 

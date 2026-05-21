@@ -7,12 +7,12 @@ Go API gateway server. Echo v4, JWT auth, SQLite persistence.
 ```
 backend/
 ├── cmd/server/main.go    # Entry point + all route definitions
-└── internal/
-    ├── handler/           # All HTTP handlers (handler.go ~592 lines)
-    ├── middleware/         # JWT auth, share-key auth, rate limiter
-    ├── model/model.go     # All domain types
-    ├── proxy/             # ProviderAdapter strategy, adapters, stream transforms
-    └── store/             # All DB access (store.go ~479 lines), schema via migrate()
+├── internal/
+│   ├── handler/           # All HTTP handlers (handler.go ~613 lines)
+│   ├── middleware/         # JWT auth, share-key auth, rate limiter (token limits)
+│   ├── model/model.go     # All domain types
+│   ├── proxy/             # ProviderAdapter strategy, adapters, stream transforms, Responses API
+│   └── store/             # All DB access (store.go ~488 lines), schema via migrate()
 ```
 
 ## WHERE TO LOOK
@@ -24,8 +24,9 @@ backend/
 | Add DB table/query | `internal/store/store.go` | Schema in `migrate()`, all CRUD in one file |
 | Add domain type | `internal/model/model.go` | Structs only |
 | Add provider adapter | `internal/proxy/adapter.go` | Factory `NewAdapter()`, then new adapter file |
-| Change rate limit logic | `internal/middleware/ratelimit.go` | Dual limits: rolling window + daily |
+| Change rate limit logic | `internal/middleware/ratelimit.go` | Triple limits: rolling window + daily requests + daily token in/out |
 | Change stream format | `internal/proxy/transform.go` | Bidirectional OpenAI↔Anthropic conversion (585 lines) |
+| Change Responses API | `internal/proxy/responses.go` | OpenAI Responses API ↔ Chat Completions conversion (747 lines) |
 | Change auth logic | `internal/middleware/` | KeyAuth reads `Authorization: Bearer` or `x-api-key` |
 
 ## CONVENTIONS
@@ -34,13 +35,13 @@ backend/
 - **SQLite**: `modernc.org/sqlite` (pure Go), WAL mode enabled
 - **JWT**: 72-hour expiry
 - **ProviderAdapter**: interface in `proxy/adapter.go`, factory `NewAdapter()`, per-provider files
-- **Anthropic adapter** (`anthropic.go`, 654 lines): converts Anthropic stream events to OpenAI SSE format
-- **Rate limiter**: dual limits, rolling window (N per X hours) + daily (resets midnight UTC)
+- **Anthropic adapter** (`anthropic.go`, 698 lines): converts Anthropic stream events to OpenAI SSE format
+- **Rate limiter**: triple limits, rolling window (N per X hours) + daily requests + daily token in/out (resets midnight UTC)
 - **Auth**: `KeyAuth` middleware accepts both `Authorization: Bearer` and `x-api-key` header
 
 ## ANTI-PATTERNS
 
-- **God files** — handler.go (592), store.go (479), transform.go (585), anthropic.go (654)
+- **God files** — responses.go (747), anthropic.go (698), handler.go (613), transform.go (585), store.go (488)
 - **No transaction usage** — store does individual queries, no `BEGIN`/`COMMIT` blocks
 - **Route defs in main** — adding a handler requires editing two files (main.go + handler.go)
 - **Error swallowing** — 72+ `_ =` blank identifiers silently discard errors across codebase

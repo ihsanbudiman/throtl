@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"log"
@@ -9,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/ihsanbudiman/throtl/internal/model"
 	"github.com/ihsanbudiman/throtl/internal/store"
 	"github.com/labstack/echo/v4"
@@ -29,139 +29,27 @@ func NewOpenAIAdapter(s *store.Store) *OpenAIAdapter {
 	}
 }
 
-func (a *OpenAIAdapter) ProxyChat(c echo.Context, provider *model.Provider, body []byte, actualModel string, reqModel string, keyID string) error {
-	start := time.Now()
-
-	// Normalize base URL: remove trailing /v1 or /v1/ to avoid double /v1 in endpoint path
+func (a *OpenAIAdapter) DoUpstream(ctx context.Context, provider *model.Provider, body []byte, actualModel string, _ bool) (*ProxyResponse, error) {
 	baseURL := strings.TrimRight(provider.BaseURL, "/")
 	baseURL = strings.TrimSuffix(baseURL, "/v1")
 	baseURL = strings.TrimRight(baseURL, "/")
 
-	// Inject stream_options so upstream includes usage data in the stream
-	body = injectStreamUsage(body)
+	upstreamURL := baseURL + "/v1/chat/completions"
 
-	upstreamPath := c.Request().URL.Path
-	upstreamPath = strings.TrimPrefix(upstreamPath, "/v1")
-	upstreamURL := baseURL + "/v1" + upstreamPath
-	if c.Request().URL.RawQuery != "" {
-		upstreamURL += "?" + c.Request().URL.RawQuery
-	}
-
-	upstreamReq, err := http.NewRequest(c.Request().Method, upstreamURL, bytes.NewReader(body))
+	upstreamReq, err := http.NewRequest("POST", upstreamURL, bytes.NewReader(body))
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-			"error": map[string]string{"message": "Failed to create upstream request"},
-		})
+		return nil, err
 	}
-
-	upstreamReq.Header.Set("Content-Type", c.Request().Header.Get("Content-Type"))
+	upstreamReq = upstreamReq.WithContext(ctx)
+	upstreamReq.Header.Set("Content-Type", "application/json")
 	upstreamReq.Header.Set("Authorization", "Bearer "+provider.APIKey)
-	for _, h := range []string{"OpenAI-Organization", "OpenAI-Beta"} {
-		if v := c.Request().Header.Get(h); v != "" {
-			upstreamReq.Header.Set(h, v)
-		}
-	}
 
 	upstreamResp, err := a.upstream.Do(upstreamReq)
 	if err != nil {
-		log.Printf("Upstream request failed: %v", err)
-		return c.JSON(http.StatusBadGateway, map[string]interface{}{
-			"error": map[string]string{"message": "Upstream provider error"},
-		})
-	}
-	defer upstreamResp.Body.Close()
-
-	for k, vs := range upstreamResp.Header {
-		for _, v := range vs {
-			c.Response().Header().Add(k, v)
-		}
+		return nil, err
 	}
 
-	isStream := upstreamResp.Header.Get("Content-Type") == "text/event-stream" ||
-		strings.Contains(upstreamResp.Header.Get("Content-Type"), "text/event-stream")
-
-	if isStream {
-		c.Response().WriteHeader(upstreamResp.StatusCode)
-		c.Response().Flush()
-
-		flusher, canFlush := c.Response().Writer.(http.Flusher)
-		var streamBuf bytes.Buffer
-		buf := make([]byte, 4096)
-		for {
-			n, readErr := upstreamResp.Body.Read(buf)
-			if n > 0 {
-				c.Response().Writer.Write(buf[:n])
-				if canFlush {
-					flusher.Flush()
-				}
-				streamBuf.Write(buf[:n])
-			}
-			if readErr != nil {
-				break
-			}
-		}
-
-		tokensIn, tokensOut := extractStreamTokens(streamBuf.String())
-		go func() {
-			if tokensIn > 0 || tokensOut > 0 {
-				if err := a.store.IncrementTokenCount(keyID, tokensIn, tokensOut); err != nil {
-					log.Printf("Failed to increment token count: %v", err)
-				}
-			}
-			latency := int(time.Since(start).Milliseconds())
-			usageLog := &model.UsageLog{
-				ID:        uuid.New().String(),
-				APIKeyID:  keyID,
-				Provider:  provider.Name,
-				Model:     reqModel,
-				Status:    upstreamResp.StatusCode,
-				TokensIn:  tokensIn,
-				TokensOut: tokensOut,
-				LatencyMs: latency,
-				CreatedAt: time.Now(),
-			}
-			if err := a.store.CreateUsageLog(usageLog); err != nil {
-				log.Printf("Failed to log usage: %v", err)
-			}
-			_ = a.store.UpdateLastUsed(keyID)
-		}()
-		return nil
-	}
-
-	respBody, err := io.ReadAll(upstreamResp.Body)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-			"error": map[string]string{"message": "Failed to read upstream response"},
-		})
-	}
-
-	latency := int(time.Since(start).Milliseconds())
-	tokensIn, tokensOut := extractTokens(respBody)
-	usageLog := &model.UsageLog{
-		ID:        uuid.New().String(),
-		APIKeyID:  keyID,
-		Provider:  provider.Name,
-		Model:     reqModel,
-		Status:    upstreamResp.StatusCode,
-		TokensIn:  tokensIn,
-		TokensOut: tokensOut,
-		LatencyMs: latency,
-		CreatedAt: time.Now(),
-	}
-
-	go func() {
-		if tokensIn > 0 || tokensOut > 0 {
-			if err := a.store.IncrementTokenCount(keyID, tokensIn, tokensOut); err != nil {
-				log.Printf("Failed to increment token count: %v", err)
-			}
-		}
-		if err := a.store.CreateUsageLog(usageLog); err != nil {
-			log.Printf("Failed to log usage: %v", err)
-		}
-		_ = a.store.UpdateLastUsed(keyID)
-	}()
-
-	return c.Blob(upstreamResp.StatusCode, upstreamResp.Header.Get("Content-Type"), respBody)
+	return &ProxyResponse{Raw: upstreamResp}, nil
 }
 
 func (a *OpenAIAdapter) ListModels(c echo.Context, provider *model.Provider, disabledSet map[string]bool, allowedSet map[string]bool) ([]ModelEntry, error) {

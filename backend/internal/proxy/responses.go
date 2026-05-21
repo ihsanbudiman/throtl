@@ -3,6 +3,7 @@ package proxy
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -123,27 +124,34 @@ func (g *Gateway) ResponsesHandler(c echo.Context) error {
 	baseURL = strings.TrimRight(baseURL, "/")
 	upstreamURL := baseURL + "/v1/chat/completions"
 
+	client := &http.Client{Timeout: 300 * time.Second}
+
 	start := time.Now()
 
-	upstreamReq, err := http.NewRequest("POST", upstreamURL, bytes.NewReader(chatBody))
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-			"error": map[string]string{"message": "Failed to create upstream request"},
-		})
-	}
-
-	upstreamReq.Header.Set("Content-Type", "application/json")
-	upstreamReq.Header.Set("Authorization", "Bearer "+provider.APIKey)
-	for _, h := range []string{"OpenAI-Organization", "OpenAI-Beta"} {
-		if v := c.Request().Header.Get(h); v != "" {
-			upstreamReq.Header.Set(h, v)
+	doUpstream := func(ctx context.Context) (*http.Response, error) {
+		req, reqErr := http.NewRequest("POST", upstreamURL, bytes.NewReader(chatBody))
+		if reqErr != nil {
+			return nil, reqErr
 		}
+		req = req.WithContext(ctx)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+provider.APIKey)
+		for _, h := range []string{"OpenAI-Organization", "OpenAI-Beta"} {
+			if v := c.Request().Header.Get(h); v != "" {
+				req.Header.Set(h, v)
+			}
+		}
+		return client.Do(req)
 	}
 
-	client := &http.Client{Timeout: 300 * time.Second}
-	upstreamResp, err := client.Do(upstreamReq)
+	var upstreamResp *http.Response
+	_, err = DefaultRetryConfig.retryWithBackoff(c.Request().Context(), func() (*ProxyResponse, error) {
+		var rErr error
+		upstreamResp, rErr = doUpstream(c.Request().Context())
+		return &ProxyResponse{Raw: upstreamResp}, rErr
+	})
 	if err != nil {
-		log.Printf("Upstream request failed: %v", err)
+		log.Printf("Upstream request failed after retries: %v", err)
 		return c.JSON(http.StatusBadGateway, map[string]interface{}{
 			"error": map[string]string{"message": "Upstream provider error"},
 		})

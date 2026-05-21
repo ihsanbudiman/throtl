@@ -2,14 +2,13 @@ package proxy
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
-	"log"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/ihsanbudiman/throtl/internal/model"
 	"github.com/ihsanbudiman/throtl/internal/store"
 	"github.com/labstack/echo/v4"
@@ -88,266 +87,26 @@ func NewAnthropicAdapter(s *store.Store) *AnthropicAdapter {
 	}
 }
 
-func (a *AnthropicAdapter) ProxyChat(c echo.Context, provider *model.Provider, body []byte, actualModel string, reqModel string, keyID string) error {
-	start := time.Now()
-
-	wantsAnthropicResponse := c.Get("throtl_response_format") == "anthropic"
-
-	if wantsAnthropicResponse {
-		return a.proxyChatPassthrough(c, provider, body, reqModel, keyID, start)
-	}
-	return a.proxyChatWithTransform(c, provider, body, actualModel, reqModel, keyID, start)
-}
-
-// proxyChatPassthrough sends the request to Anthropic and returns the raw
-// Anthropic response without any format conversion. Used when the client
-// sent an Anthropic-format request and expects Anthropic-format back.
-func (a *AnthropicAdapter) proxyChatPassthrough(c echo.Context, provider *model.Provider, body []byte, reqModel string, keyID string, start time.Time) error {
-	estimatedInputTokens := estimateInputTokens(body)
-
+func (a *AnthropicAdapter) DoUpstream(ctx context.Context, provider *model.Provider, body []byte, actualModel string, _ bool) (*ProxyResponse, error) {
 	anthropicBody := OpenAIToAnthropicRequest(body)
 
 	upstreamURL := strings.TrimRight(provider.BaseURL, "/") + "/v1/messages"
 
 	upstreamReq, err := http.NewRequest("POST", upstreamURL, bytes.NewReader(anthropicBody))
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-			"error": map[string]string{"message": "Failed to create upstream request"},
-		})
+		return nil, err
 	}
-
+	upstreamReq = upstreamReq.WithContext(ctx)
 	upstreamReq.Header.Set("Content-Type", "application/json")
 	upstreamReq.Header.Set("x-api-key", provider.APIKey)
 	upstreamReq.Header.Set("anthropic-version", anthropicVersion)
 
 	upstreamResp, err := a.upstream.Do(upstreamReq)
 	if err != nil {
-		log.Printf("Upstream request failed: %v", err)
-		return c.JSON(http.StatusBadGateway, map[string]interface{}{
-			"error": map[string]string{"message": "Upstream provider error"},
-		})
-	}
-	defer upstreamResp.Body.Close()
-
-	isStreamResp := upstreamResp.Header.Get("Content-Type") == "text/event-stream" ||
-		strings.Contains(upstreamResp.Header.Get("Content-Type"), "text/event-stream")
-
-	if isStreamResp {
-		for k, vs := range upstreamResp.Header {
-			for _, v := range vs {
-				c.Response().Header().Add(k, v)
-			}
-		}
-		c.Response().WriteHeader(upstreamResp.StatusCode)
-		c.Response().Flush()
-
-		flusher, canFlush := c.Response().Writer.(http.Flusher)
-		var streamBuf bytes.Buffer
-		buf := make([]byte, 4096)
-		for {
-			n, readErr := upstreamResp.Body.Read(buf)
-			if n > 0 {
-				c.Response().Writer.Write(buf[:n])
-				streamBuf.Write(buf[:n])
-				if canFlush {
-					flusher.Flush()
-				}
-			}
-			if readErr != nil {
-				break
-			}
-		}
-
-		inputTokens, outputTokens := extractAnthropicStreamTokensPassthrough(streamBuf.String())
-		if inputTokens == 0 {
-			inputTokens = estimatedInputTokens
-		}
-		log.Printf("Anthropic passthrough stream tokens: in=%d out=%d bufLen=%d", inputTokens, outputTokens, streamBuf.Len())
-
-		go func() {
-			if inputTokens > 0 || outputTokens > 0 {
-				if err := a.store.IncrementTokenCount(keyID, inputTokens, outputTokens); err != nil {
-					log.Printf("Failed to increment token count: %v", err)
-				}
-			}
-			latency := int(time.Since(start).Milliseconds())
-			usageLog := &model.UsageLog{
-				ID:        uuid.New().String(),
-				APIKeyID:  keyID,
-				Provider:  provider.Name,
-				Model:     reqModel,
-				Status:    upstreamResp.StatusCode,
-				TokensIn:  inputTokens,
-				TokensOut: outputTokens,
-				LatencyMs: latency,
-				CreatedAt: time.Now(),
-			}
-			if err := a.store.CreateUsageLog(usageLog); err != nil {
-				log.Printf("Failed to log usage: %v", err)
-			}
-			_ = a.store.UpdateLastUsed(keyID)
-		}()
-		return nil
+		return nil, err
 	}
 
-	respBody, err := io.ReadAll(upstreamResp.Body)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-			"error": map[string]string{"message": "Failed to read upstream response"},
-		})
-	}
-
-	inputTokens, outputTokens := ExtractAnthropicTokens(respBody)
-
-	latency := int(time.Since(start).Milliseconds())
-	usageLog := &model.UsageLog{
-		ID:        uuid.New().String(),
-		APIKeyID:  keyID,
-		Provider:  provider.Name,
-		Model:     reqModel,
-		Status:    upstreamResp.StatusCode,
-		TokensIn:  inputTokens,
-		TokensOut: outputTokens,
-		LatencyMs: latency,
-		CreatedAt: time.Now(),
-	}
-
-	go func() {
-		if inputTokens > 0 || outputTokens > 0 {
-			if err := a.store.IncrementTokenCount(keyID, inputTokens, outputTokens); err != nil {
-				log.Printf("Failed to increment token count: %v", err)
-			}
-		}
-		if err := a.store.CreateUsageLog(usageLog); err != nil {
-			log.Printf("Failed to log usage: %v", err)
-		}
-		_ = a.store.UpdateLastUsed(keyID)
-	}()
-
-	for k, vs := range upstreamResp.Header {
-		for _, v := range vs {
-			c.Response().Header().Add(k, v)
-		}
-	}
-	return c.Blob(upstreamResp.StatusCode, upstreamResp.Header.Get("Content-Type"), respBody)
-}
-
-// proxyChatWithTransform sends the request to Anthropic and converts the
-// response to OpenAI format. Used when the client sent an OpenAI-format request.
-func (a *AnthropicAdapter) proxyChatWithTransform(c echo.Context, provider *model.Provider, body []byte, actualModel string, reqModel string, keyID string, start time.Time) error {
-	estimatedInputTokens := estimateInputTokens(body)
-
-	anthropicBody := OpenAIToAnthropicRequest(body)
-
-	upstreamURL := strings.TrimRight(provider.BaseURL, "/") + "/v1/messages"
-
-	upstreamReq, err := http.NewRequest("POST", upstreamURL, bytes.NewReader(anthropicBody))
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-			"error": map[string]string{"message": "Failed to create upstream request"},
-		})
-	}
-
-	upstreamReq.Header.Set("Content-Type", "application/json")
-	upstreamReq.Header.Set("x-api-key", provider.APIKey)
-	upstreamReq.Header.Set("anthropic-version", anthropicVersion)
-
-	upstreamResp, err := a.upstream.Do(upstreamReq)
-	if err != nil {
-		log.Printf("Upstream request failed: %v", err)
-		return c.JSON(http.StatusBadGateway, map[string]interface{}{
-			"error": map[string]string{"message": "Upstream provider error"},
-		})
-	}
-	defer upstreamResp.Body.Close()
-
-	isStreamResp := upstreamResp.Header.Get("Content-Type") == "text/event-stream" ||
-		strings.Contains(upstreamResp.Header.Get("Content-Type"), "text/event-stream")
-
-	if isStreamResp {
-		respID := "chatcmpl-" + uuid.New().String()[:8]
-
-		c.Response().Header().Set("Content-Type", "text/event-stream")
-		c.Response().Header().Set("Cache-Control", "no-cache")
-		c.Response().Header().Set("Connection", "keep-alive")
-		c.Response().WriteHeader(upstreamResp.StatusCode)
-		c.Response().Flush()
-
-		flusher, canFlush := c.Response().Writer.(http.Flusher)
-
-		inputTokens, outputTokens := streamAnthropicToOpenAI(
-			upstreamResp.Body, c, respID, actualModel, canFlush, flusher,
-		)
-		if inputTokens == 0 {
-			inputTokens = estimatedInputTokens
-		}
-
-		go func() {
-			if inputTokens > 0 || outputTokens > 0 {
-				if err := a.store.IncrementTokenCount(keyID, inputTokens, outputTokens); err != nil {
-					log.Printf("Failed to increment token count: %v", err)
-				}
-			}
-			latency := int(time.Since(start).Milliseconds())
-			usageLog := &model.UsageLog{
-				ID:        uuid.New().String(),
-				APIKeyID:  keyID,
-				Provider:  provider.Name,
-				Model:     reqModel,
-				Status:    upstreamResp.StatusCode,
-				TokensIn:  inputTokens,
-				TokensOut: outputTokens,
-				LatencyMs: latency,
-				CreatedAt: time.Now(),
-			}
-			if err := a.store.CreateUsageLog(usageLog); err != nil {
-				log.Printf("Failed to log usage: %v", err)
-			}
-			_ = a.store.UpdateLastUsed(keyID)
-		}()
-		return nil
-	}
-
-	respBody, err := io.ReadAll(upstreamResp.Body)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-			"error": map[string]string{"message": "Failed to read upstream response"},
-		})
-	}
-
-	inputTokens, outputTokens := ExtractAnthropicTokens(respBody)
-
-	openaiBody := AnthropicToOpenAIResponse(respBody)
-	if openaiBody == nil {
-		openaiBody = respBody
-	}
-
-	latency := int(time.Since(start).Milliseconds())
-	usageLog := &model.UsageLog{
-		ID:        uuid.New().String(),
-		APIKeyID:  keyID,
-		Provider:  provider.Name,
-		Model:     reqModel,
-		Status:    upstreamResp.StatusCode,
-		TokensIn:  inputTokens,
-		TokensOut: outputTokens,
-		LatencyMs: latency,
-		CreatedAt: time.Now(),
-	}
-
-	go func() {
-		if inputTokens > 0 || outputTokens > 0 {
-			if err := a.store.IncrementTokenCount(keyID, inputTokens, outputTokens); err != nil {
-				log.Printf("Failed to increment token count: %v", err)
-			}
-		}
-		if err := a.store.CreateUsageLog(usageLog); err != nil {
-			log.Printf("Failed to log usage: %v", err)
-		}
-		_ = a.store.UpdateLastUsed(keyID)
-	}()
-
-	return c.Blob(upstreamResp.StatusCode, "application/json", openaiBody)
+	return &ProxyResponse{Raw: upstreamResp}, nil
 }
 
 // streamAnthropicToOpenAI reads an Anthropic SSE stream from upstream, transforms

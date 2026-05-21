@@ -20,6 +20,7 @@ const KeysPage = lazy(() => import("@/pages/KeysPage"));
 const ProvidersPage = lazy(() => import("@/pages/ProvidersPage"));
 const ModelsPage = lazy(() => import("@/pages/ModelsPage"));
 const UsagePage = lazy(() => import("@/pages/UsagePage"));
+const DocumentationPage = lazy(() => import("@/pages/DocumentationPage"));
 const LoginPage = lazy(() => import("@/pages/LoginPage"));
 const SetupPage = lazy(() => import("@/pages/SetupPage"));
 
@@ -40,6 +41,7 @@ const PATH_TO_PAGE: Record<string, Page> = {
   "/providers": "providers",
   "/models": "models",
   "/usage": "usage",
+  "/docs": "documentation",
 };
 
 const PAGE_TO_PATH: Record<Page, string> = {
@@ -48,6 +50,7 @@ const PAGE_TO_PATH: Record<Page, string> = {
   providers: "/providers",
   models: "/models",
   usage: "/usage",
+  documentation: "/docs",
 };
 
 function AppContent() {
@@ -103,6 +106,7 @@ function AppContent() {
               <Route path="/providers" element={<ProvidersPage />} />
               <Route path="/models" element={<ModelsPage />} />
               <Route path="/usage" element={<UsagePage />} />
+              <Route path="/docs" element={<DocumentationPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>
